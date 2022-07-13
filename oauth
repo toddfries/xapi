@@ -1,0 +1,79 @@
+#!/usr/bin/perl
+
+
+# Copyright (c) 2022 Todd T. Fries <todd@fries.net>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+use strict;
+use warnings;
+use utf8;
+use open qw/:std :utf8/;
+
+use Data::Dumper;
+use Twitter::API;
+use ReadConf;
+
+my $rc = ReadConf->new();
+my $conf = $rc->readconf($ENV{HOME}."/.config/tapi/tapi.conf");
+
+my $c = $conf->{creds};
+
+if (!defined($c)) {
+	print "[creds] not found in tapi.conf\n";
+}
+
+my $client = Twitter::API->new_with_traits(
+    traits          => 'Enchilada',
+    # Net::Twitter example app credentials
+    map(tr/A-Za-z/N-ZA-Mn-za-m/r, qw/
+        pbafhzre_xrl i8g3WVYxFglyotakTYBD
+        pbafhzre_frperg 5e31eFZp0ACgOcUpX8ZiaPYt2bNlSYk5rTBZxKZ
+    /),
+#    traits => [ qw/AppAuth ApiMethods/ ],
+    consumer_key    => $c->{consumer_key},
+    consumer_secret => $c->{consumer_secret},
+);
+ 
+my $request = $client->oauth_request_token;
+
+my $auth_url = $client->oauth_authorization_url({
+    oauth_token => $request->{oauth_token},
+});
+
+print "
+Authorize this application at: $auth_url
+Then, enter the returned PIN number displayed in the browser: ";
+
+my $pin = <STDIN>; # wait for input
+chomp $pin;
+print '\n';
+
+my $access = $client->oauth_access_token({
+    token        => $request->{oauth_token},
+    token_secret => $request->{oauth_token_secret},
+    verifier     => $pin,
+});
+
+my ( $token, $secret ) = @{$access}{qw(oauth_token oauth_token_secret)};
+
+# Now you have user credentials
+print 'access_token.......: ', $token, "\n";
+print 'access_token_secret: ', $secret, "\n";
+ 
+my $status = $client->user_timeline({
+    count         => 1,
+    -token        => $token,
+    -token_secret => $secret,
+});
+print Dumper($status);

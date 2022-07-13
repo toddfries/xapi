@@ -1,0 +1,100 @@
+#!/usr/bin/perl
+
+
+# Copyright (c) 2022 Todd T. Fries <todd@fries.net>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+use strict;
+use warnings;
+use utf8;
+use open qw/:std :utf8/;
+
+use Data::Dumper;
+use ReadConf;
+use Twitter::API;
+
+my $rc = ReadConf->new();
+my $conf = $rc->readconf($ENV{HOME}."/.config/tapi/tapi.conf");
+
+my $c = $conf->{creds};
+
+if (!defined($c)) {
+	print "[creds] not found in tapi.conf\n";
+}
+
+my $client = Twitter::API->new_with_traits(
+	api_version => '2',
+	api_ext	=> '',
+	traits => [ qw/ApiMethods/ ],
+	consumer_key	=> $c->{consumer_key},
+	consumer_secret => $c->{consumer_secret},
+	access_token	=> $c->{access_token},
+	access_token_secret => $c->{access_token_secret},
+);
+
+#my $r = $client->verify_credentials;
+#print "$$r{screen_name} is authorized\n";
+
+#my $mentions = $client->mentions;
+#for my $status ( @$mentions ) {
+#	print $$status{text}."\n";
+#}
+
+my $who = $ARGV[0];
+if (!defined($who)) {
+	die "need a username on cli";
+}
+
+my $user = $client->get("users/by/username/$who");
+
+#print "user: ".Dumper($user);
+
+my $username = $user->{data}->{username};
+my $id = $user->{data}->{id};
+
+my $tweets = $client->get("users/${id}/tweets?tweet.fields=created_at");
+
+#print "tweets: ".Dumper($tweets);
+
+foreach my $tweet ( @{ $tweets->{data} } ) {
+	my $tid = $tweet->{id};
+	my $tquery = $client->get("tweets/${tid}?expansions=attachments.media_keys,referenced_tweets.id&media.fields=url,variants");
+	#printf "tid(%d) = %s\n",$tid, Dumper($tquery);
+	printf "%25s %s (%20d)\n", $tweet->{created_at}, $tquery->{data}->{text}, $tid;
+	#printf "%20d %s\n", $tid, $tquery->{data}->{text};
+	#printf "%20s\n", $tweet->{created_at};
+	foreach my $media ( @{ $tquery->{includes}->{media} } ) {
+		if ($media->{type} =~ /^(photo)/) {
+			printf "%25s    %s\n", " ", $media->{url};
+			next;
+		}
+		if ($media->{type} =~ /^(video|animated_gif)/) {
+			foreach my $v ( @{ $media->{variants} } ) {
+				$v->{content_type} =~ s/application/app/;
+				my $bitrate = $v->{bit_rate};
+				my $xtra = "";
+				if (defined($bitrate)) {
+					if ($bitrate > 0) {
+						$xtra = " (bitrate: $bitrate)";
+					}
+				}
+
+				printf "%25s    %s%s\n",
+				    $v->{content_type}, $v->{url}, $xtra;
+			}
+			next;
+		}
+		printf "%20s    %s\n", " ", Dumper($media);
+	}
+}
