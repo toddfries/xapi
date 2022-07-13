@@ -63,18 +63,37 @@ my $user = $client->get("users/by/username/$who");
 my $username = $user->{data}->{username};
 my $id = $user->{data}->{id};
 
-my $tweets = $client->get("users/${id}/tweets?tweet.fields=created_at");
+my $tweets = $client->get("users/${id}/tweets?tweet.fields=created_at,referenced_tweets,author_id,in_reply_to_user_id&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys&media.fields=url,variants,media_key,type&max_results=5");
+#my $tweets = $client->get("tweets/search/recent?query=\@${who}&tweet.fields=created_at,referenced_tweets");
 
 #print "tweets: ".Dumper($tweets);
 
 foreach my $tweet ( @{ $tweets->{data} } ) {
 	my $tid = $tweet->{id};
-	my $tquery = $client->get("tweets/${tid}?expansions=attachments.media_keys,referenced_tweets.id&media.fields=url,variants");
-	#printf "tid(%d) = %s\n",$tid, Dumper($tquery);
-	printf "%25s %s (%20d)\n", $tweet->{created_at}, $tquery->{data}->{text}, $tid;
-	#printf "%20d %s\n", $tid, $tquery->{data}->{text};
-	#printf "%20s\n", $tweet->{created_at};
-	foreach my $media ( @{ $tquery->{includes}->{media} } ) {
+	#my $tquery = $client->get("tweets/${tid}?tweet.fields=id,text,created_at,author_id&expansions=attachments.media_keys,referenced_tweets.id&media.fields=url,variants");
+	my $status = "";
+	my $rstr = "";
+	foreach my $ref ( @{ $tweet->{referenced_tweets} } ) {
+		my $tstr = $ref->{type};
+		if ($ref->{type} eq "replied_to") {
+			$tstr = "Re";
+			$status = "RT ";
+		} elsif ($ref->{type} eq "quoted") {
+			$tstr = "Quote";
+			$status = "Q ";
+		} else {
+			$rstr .= "Unknown type: ".Dumper($ref);
+			next;
+		}
+		$rstr .= sprintf "%s %s", $tstr, $ref->{id};
+		#print "ref dump: ".Dumper($ref);
+		#print "\n";
+	}
+	if (length($rstr)>0) {
+		$rstr = ", $rstr";
+	}
+	printf "%25s %s%s (%d%s)\n", $tweet->{created_at}, $status, $tweet->{text}, $tid, $rstr;
+	foreach my $media ( @{ $tweet->{includes}->{media} } ) {
 		if ($media->{type} =~ /^(photo)/) {
 			printf "%25s    %s\n", " ", $media->{url};
 			next;
