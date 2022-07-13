@@ -33,7 +33,7 @@ if (!defined($c)) {
 	print "[creds] not found in tapi.conf\n";
 }
 
-my $client = Twitter::API->new_with_traits(
+our $client = Twitter::API->new_with_traits(
 	api_version => '2',
 	api_ext	=> '',
 	traits => [ qw/ApiMethods/ ],
@@ -56,28 +56,144 @@ if (!defined($who)) {
 	die "need a username on cli";
 }
 
-my $user = $client->get("users/by/username/$who");
+our $umemcache = { }; # users
+our $tmemcache = { }; # tweets
+our $mmemcache = { }; # media
 
-#print "user: ".Dumper($user);
+my $data = getuser_byname($who);
 
-my $username = $user->{data}->{username};
-my $id = $user->{data}->{id};
+my $id = $data->{id};
 
-my $tweets = $client->get("users/${id}/tweets?tweet.fields=created_at,referenced_tweets,author_id,in_reply_to_user_id&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys&media.fields=url,variants,media_key,type&max_results=5");
-#my $tweets = $client->get("tweets/search/recent?query=\@${who}&tweet.fields=created_at,referenced_tweets");
 
-#print "tweets: ".Dumper($tweets);
+my $tweets = $client->get("users/${id}/tweets".
+	"?tweet.fields=created_at,referenced_tweets,author_id,in_reply_to_user_id".
+	"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
+	"&media.fields=url,variants,media_key,type".
+	"&max_results=5");
+our $shown = 1;
+print expand_tweet(0, $tweets);
+
+1;
+
+sub getuser_byname {
+	my ($who) = @_;
+
+	my $data = $umemcache->{$who};
+	if (defined($data)) {
+		#print "ucache hit  ".$data->{id}."\n";
+		return $data;
+	}
+
+	# cache the who -> id somewhere persistent to reduce api calls
+	$data = $client->get("users/by/username/$who")->{data};
+	my $id = $data->{id};
+	#print "ucache miss ".$data->{id}."\n";
+
+	#print "user: ".Dumper($user);
+
+	# double mem use but easier lookup
+
+	$umemcache->{$id} = $data;
+	$umemcache->{$who} = $data;
+
+	return $data;
+}
+sub getuser_byid {
+	my ($id) = @_;
+
+	my $data = $umemcache->{$id};
+	if (defined($data)) {
+		#print "ucache hit  ".$data->{id}."\n";
+		return $data;
+	}
+
+	$data = $client->get("users/${id}")->{data};
+	my $who = $data->{username};
+	#print "ucache miss ".$data->{id}."\n";
+
+	# double mem use but easier lookup
+
+	$umemcache->{$id} = $data;
+	$umemcache->{$who} = $data;
+
+	return $data;
+}
+
+sub getmedia_bykey {
+	my ($mkey) = @_;
+
+	my $media = $mmemcache->{$mkey};
+	if (defined($media)) {
+		return $media;
+	}
+
+	# XXX to finish
+}
+
+sub expand_tweet {
+	my ($level, $tweets) = @_;
+
+	my $returnstr = "";
+
+	my $spacecount = $level * 4+1;
+	my $prestr = sprintf "%${spacecount}s", $level;
+
+if ($shown++ < 1) {
+	print "\n\ntweets: ".Dumper($tweets)."\n\n";
+}
+
+foreach my $user ( @{ $tweets->{includes}->{users} } ) {
+	my $id = $user->{id};
+	if (!defined($id)) {
+		print "\n\nuser without id? ".Dumper($user)."\n\n";
+		next;
+	}
+	my $who = $user->{username};
+	if (defined($umemcache->{$id})) {
+		next;
+	}
+	
+	$umemcache->{$id} = $user;
+	$umemcache->{$who} = $user;
+}
+foreach my $tweet ( @{ $tweets->{includes}->{tweets} } ) {
+	my $tid = $tweet->{id};
+
+	foreach my $var (%{ $tweet }) {
+		$tmemcache->{$tid}->{$var} = $tweet->{$var};
+	}
+}
+
+foreach my $media ( @{ $tweets->{includes}->{media} } ) {
+	my $mkey = $media->{media_key};
+
+	foreach my $var (%{ $media }) {
+		if (defined($mmemcache->{$mkey}->{$var})) {
+			next;
+		}
+		$mmemcache->{$mkey}->{$var} = $media->{$var};
+	}
+}
+	
 
 foreach my $tweet ( @{ $tweets->{data} } ) {
 	my $tid = $tweet->{id};
-	#my $tquery = $client->get("tweets/${tid}?tweet.fields=id,text,created_at,author_id&expansions=attachments.media_keys,referenced_tweets.id&media.fields=url,variants");
+	my $username = getuser_byid($tweet->{author_id})->{username};
 	my $status = "";
 	my $rstr = "";
+	my $text = "";
 	foreach my $ref ( @{ $tweet->{referenced_tweets} } ) {
 		my $tstr = $ref->{type};
 		if ($ref->{type} eq "replied_to") {
 			$tstr = "Re";
 			$status = "RT ";
+			my $q = $client->get("tweets".
+				"?ids=".$ref->{id}.
+				"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
+	                        "&tweet.fields=created_at,referenced_tweets,author_id,in_reply_to_user_id".
+				"&media.fields=url,variants,media_key,type"
+			);
+			$text .= expand_tweet($level + 1, $q );
 		} elsif ($ref->{type} eq "quoted") {
 			$tstr = "Quote";
 			$status = "Q ";
@@ -92,28 +208,59 @@ foreach my $tweet ( @{ $tweets->{data} } ) {
 	if (length($rstr)>0) {
 		$rstr = ", $rstr";
 	}
-	printf "%25s %s%s (%d%s)\n", $tweet->{created_at}, $status, $tweet->{text}, $tid, $rstr;
-	foreach my $media ( @{ $tweet->{includes}->{media} } ) {
-		if ($media->{type} =~ /^(photo)/) {
-			printf "%25s    %s\n", " ", $media->{url};
-			next;
-		}
-		if ($media->{type} =~ /^(video|animated_gif)/) {
-			foreach my $v ( @{ $media->{variants} } ) {
-				$v->{content_type} =~ s/application/app/;
-				my $bitrate = $v->{bit_rate};
-				my $xtra = "";
-				if (defined($bitrate)) {
-					if ($bitrate > 0) {
-						$xtra = " (bitrate: $bitrate)";
-					}
-				}
+	my $ttext = $tweet->{text};
+	$ttext =~ s/[\n\r\f]/ /sg;
+	$ttext =~ s/\s+/ /g;
+	$ttext =~ s/\&amp;/\&/g;
+	
+	$returnstr .= sprintf "%s%25s \@%s %s%s (%d%s)\n", $prestr, $tweet->{created_at}, $username, $status, $ttext, $tid, $rstr;
 
-				printf "%25s    %s%s\n",
-				    $v->{content_type}, $v->{url}, $xtra;
-			}
+	foreach my $media ( @{ $tweet->{includes}->{media} } ) {
+		$returnstr .= expand_media($prestr, $media);
+	}
+	foreach my $mkey (@{ $tweet->{attachments}->{media_keys} }) {
+		#print "\nmkey: $mkey\n";
+		if (!defined($mmemcache->{$mkey})) {
+			print "mmemcache EEXIST for $mkey\n";
 			next;
 		}
-		printf "%20s    %s\n", " ", Dumper($media);
+		$returnstr .= expand_media($prestr, $mmemcache->{$mkey} );
 	}
+			
+	$returnstr .= $text;
+	#$returnstr .= "${prestr} tweet dump: ".Dumper($tweet)."\n\n";
+}
+
+	return $returnstr;
+
+}
+
+sub expand_media {
+	my ($prestr, $media) = @_;
+
+	#print "\nexpand_media for mkey ".$media->{media_key}."\n";
+
+	my $returnstr = "";
+	if ($media->{type} =~ /^(photo)/) {
+		$returnstr .= sprintf "%s%25s    %s\n", $prestr, " ", $media->{url};
+		return $returnstr;
+	}
+	if ($media->{type} =~ /^(video|animated_gif)/) {
+		foreach my $v ( @{ $media->{variants} } ) {
+			$v->{content_type} =~ s/application/app/;
+			my $bitrate = $v->{bit_rate};
+			my $xtra = "";
+			if (defined($bitrate)) {
+				if ($bitrate > 0) {
+					$xtra = " (bitrate: $bitrate)";
+				}
+			}
+
+			$returnstr .= sprintf "%s%25s    %s%s\n", $prestr,
+			    $v->{content_type}, $v->{url}, $xtra;
+		}
+		return $returnstr;
+	}
+	$returnstr .= sprintf "%s%20s    %s\n", $prestr, " ", Dumper($media);
+	return $returnstr;
 }
