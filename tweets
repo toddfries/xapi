@@ -197,6 +197,13 @@ foreach my $tweet ( @{ $tweets->{data} } ) {
 		} elsif ($ref->{type} eq "quoted") {
 			$tstr = "Quote";
 			$status = "Q ";
+			my $q = $client->get("tweets".
+				"?ids=".$ref->{id}.
+				"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
+	                        "&tweet.fields=created_at,referenced_tweets,author_id,in_reply_to_user_id".
+				"&media.fields=url,variants,media_key,type"
+			);
+			$text .= expand_tweet($level + 1, $q );
 		} else {
 			$rstr .= "Unknown type: ".Dumper($ref);
 			next;
