@@ -183,29 +183,34 @@ foreach my $tweet ( @{ $tweets->{data} } ) {
 	my $text = "";
 	foreach my $ref ( @{ $tweet->{referenced_tweets} } ) {
 		my $tstr = $ref->{type};
+		my $recurse = 0;
 		if ($ref->{type} eq "replied_to") {
 			$tstr = "Re";
+			$status = "RP ";
+			$recurse++;
+		} elsif ($ref->{type} eq "retweeted") {
+			$tstr = "Rt";
 			$status = "RT ";
-			my $q = $client->get("tweets".
-				"?ids=".$ref->{id}.
-				"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
-	                        "&tweet.fields=created_at,referenced_tweets,author_id,in_reply_to_user_id".
-				"&media.fields=url,variants,media_key,type"
-			);
-			$text .= expand_tweet($level + 1, $q );
+			$recurse++;
 		} elsif ($ref->{type} eq "quoted") {
 			$tstr = "Quote";
 			$status = "Q ";
+			$recurse++;
+		} else {
+			$tstr = "Unknown(type=".$ref->{type}.")";
+			$status = "? ";
+		}
+		if ($recurse > 0) {
 			my $q = $client->get("tweets".
-				"?ids=".$ref->{id}.
-				"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
-	                        "&tweet.fields=created_at,referenced_tweets,author_id,in_reply_to_user_id".
-				"&media.fields=url,variants,media_key,type"
+			    "?ids=".$ref->{id}.
+			    "&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
+			    "&tweet.fields=created_at,referenced_tweets,author_id,in_reply_to_user_id".
+			    "&media.fields=url,variants,media_key,type"
 			);
 			$text .= expand_tweet($level + 1, $q );
-		} else {
-			$rstr .= "Unknown type: ".Dumper($ref);
-			next;
+		}
+		if (length($rstr) > 0) {
+			$rstr .= ", ";
 		}
 		$rstr .= sprintf "%s %s", $tstr, $ref->{id};
 		#print "ref dump: ".Dumper($ref);
