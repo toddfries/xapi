@@ -20,16 +20,30 @@ use utf8;
 use open qw/:std :utf8/;
 
 use Data::Dumper;
+use Getopt::Std;
 use ReadConf;
 use Twitter::API;
 
+our $opt_c; # config file
+our $opt_r; # desired resutls count
+
+# defaults
+$opt_c = $ENV{HOME}."/.config/tapi/tapi.conf";
+$opt_r = 10;
+
+getopts('c:r:');
+
+if (!defined($opt_c)) {
+	die "Config file '${opt_c}' EEXIST";
+}
+
 my $rc = ReadConf->new();
-my $conf = $rc->readconf($ENV{HOME}."/.config/tapi/tapi.conf");
+my $conf = $rc->readconf($opt_c);
 
 my $c = $conf->{creds};
 
 if (!defined($c)) {
-	print "[creds] not found in tapi.conf\n";
+	die "[creds] not found in tapi.conf";
 }
 
 our $client = Twitter::API->new_with_traits(
@@ -68,7 +82,7 @@ my $tweets = $client->get("users/${id}/tweets".
 	"?tweet.fields=created_at,referenced_tweets,author_id,in_reply_to_user_id".
 	"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 	"&media.fields=url,variants,media_key,type".
-	"&max_results=5");
+	"&max_results=${opt_r}");
 our $shown = 1;
 print expand_tweet(0, $tweets);
 
