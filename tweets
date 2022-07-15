@@ -78,6 +78,11 @@ my $maxres = $opt_r;
 if ($maxres < 5) {
 	$maxres = 5;
 }
+# rather than error out, cap it at max.
+# XXX in the future, consider repeat querying for 100?
+if ($maxres > 100) {
+	$maxres = 100;
+}
 my $tweets = $client->get("users/${id}/tweets".
 	"?tweet.fields=created_at,referenced_tweets,author_id,in_reply_to_user_id".
 	"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
