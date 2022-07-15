@@ -72,6 +72,12 @@ our $v = $opt_v;
 my $data = getuser_byname($who);
 my $id = $data->{id};
 
+my $maxres = $opt_r;
+
+# Seriously, the api can't do < 5. So request 5, and count 'm ourself.
+if ($maxres < 5) {
+	$maxres = 5;
+}
 my $tweets = $client->get("users/${id}/tweets".
 	"?tweet.fields=created_at,referenced_tweets,author_id,in_reply_to_user_id".
 	"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
@@ -182,8 +188,11 @@ sub expand_tweet {
 		}
 	}
 
-
+	my $tcount = 0;
 	foreach my $tweet ( @{ $tweets->{data} } ) {
+		if ($tcount++ > $opt_r) {
+			last;
+		}
 		my $tid = $tweet->{id};
 		my $username = getuser_byid($tweet->{author_id})->{username};
 		my $status = "";
