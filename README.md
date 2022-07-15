@@ -11,10 +11,11 @@ EOF
 
 Now get the access token and secret:
 
-`$ oauth`
-`Authorize this application at:` [Twitter Oauth](https://api.twitter.com/oauth/authorize?oauth_token=..magic..autogen..string..)
-`Then, enter the returned PIN number displayed in the browser: <pincode from browser>`
 ```
+$ oauth
+Authorize this application at: https://api.twitter.com/oauth/authorize?oauth_token=..magic..autogen..string..
+Then, enter the returned PIN number displayed in the browser: <pincode from browser>
+
 access_token.......: <access_token>
 access_token_secret: <access_token_secret>
 ...
@@ -22,8 +23,6 @@ $ cat <<EOF >> $HOME/.config/tapi/tapi.conf
 access_token = <access_token>
 access_token_secret = <access_token_secret>
 EOF
-```
-```
 $ tweets unix2mars
 ...
 0 2022-07-13T20:33:03.000Z @unix2mars RT Another level nested again. (1547318208583143425, Re 1547318135841226753)
