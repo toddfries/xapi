@@ -12,7 +12,7 @@ EOF
 Now get the access token and secret:
 
 $ oauth
-Authorize this application at: https://api.twitter.com/oauth/authorize?oauth_token=<magic autogen string>
+Authorize this application at: [Twitter Oauth](https://api.twitter.com/oauth/authorize?oauth_token=..magic..autogen..string..)
 Then, enter the returned PIN number displayed in the browser: <pincode from browser>
 
 access_token.......: <access_token>

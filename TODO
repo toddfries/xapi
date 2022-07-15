@@ -1,7 +1,8 @@
-make it so a tweet is shown once.  I think.  This is atrocious:
+- make it so a tweet is shown once.  I think.  This is atrocious:
 
             3 2022-07-15T01:46:09.000Z @elonmusk RP @Erdayastronaut @SpaceX @Caspar_Stanley @IzanRamos2002 All mass necessitated by an engine design should count as engine mass, eg shrouds, TVC hydraulic power or excess purge gas. Raptors in production now have electric TVC, saving over a ton of hydraulics mass on booster. (1547759390513512455, Re 154758
         2 2022-07-15T01:46:09.000Z @elonmusk RP @Erdayastronaut @SpaceX @Caspar_Stanley @IzanRamos2002 All mass necessitated by an engine design should count as engine mass, eg shrouds, TVC hydraulic power or excess purge gas. Raptors in production now have electric TVC, saving over a ton of hydraulics mass on booster. (1547759390513512455, Re 1547586905
     1 2022-07-15T01:46:09.000Z @elonmusk RP @Erdayastronaut @SpaceX @Caspar_Stanley @IzanRamos2002 All mass necessitated by an engine design should count as engine mass, eg shrouds, TVC hydraulic power or excess purge gas. Raptors in production now have electric TVC, saving over a ton of hydraulics mass on booster. (1547759390513512455, Re 15475869056041
 0 2022-07-15T01:46:09.000Z @elonmusk RP @Erdayastronaut @SpaceX @Caspar_Stanley @IzanRamos2002 All mass necessitated by an engine design should count as engine mass, eg shrouds, TVC hydraulic power or excess purge gas. Raptors in production now have electric TVC, saving over a ton of hydraulics mass on booster. (1547759390513512455, Re 154758690560416563
 
+- roll oauth separate program into tweets setup process
