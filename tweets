@@ -87,7 +87,7 @@ my $tweets = $client->get("users/${id}/tweets".
 	"?tweet.fields=created_at,referenced_tweets,author_id,in_reply_to_user_id".
 	"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 	"&media.fields=url,variants,media_key,type".
-	"&max_results=${opt_r}");
+	"&max_results=${maxres}");
 our $shown = 1;
 print expand_tweet(0, $tweets);
 
