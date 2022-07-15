@@ -26,12 +26,14 @@ use Twitter::API;
 
 our $opt_c; # config file
 our $opt_r; # desired resutls count
+our $opt_v; # verbosity
 
 # defaults
 $opt_c = $ENV{HOME}."/.config/tapi/tapi.conf";
 $opt_r = 10;
+$opt_v = 0;
 
-getopts('c:r:');
+getopts('c:r:v');
 
 if (!defined($opt_c)) {
 	die "Config file '${opt_c}' EEXIST";
@@ -56,14 +58,6 @@ our $client = Twitter::API->new_with_traits(
 	access_token_secret => $c->{access_token_secret},
 );
 
-#my $r = $client->verify_credentials;
-#print "$$r{screen_name} is authorized\n";
-
-#my $mentions = $client->mentions;
-#for my $status ( @$mentions ) {
-#	print $$status{text}."\n";
-#}
-
 my $who = $ARGV[0];
 if (!defined($who)) {
 	die "need a username on cli";
@@ -73,10 +67,10 @@ our $umemcache = { }; # users
 our $tmemcache = { }; # tweets
 our $mmemcache = { }; # media
 
+our $v = $opt_v;
+
 my $data = getuser_byname($who);
-
 my $id = $data->{id};
-
 
 my $tweets = $client->get("users/${id}/tweets".
 	"?tweet.fields=created_at,referenced_tweets,author_id,in_reply_to_user_id".
@@ -151,110 +145,110 @@ sub expand_tweet {
 	my $spacecount = $level * 4+1;
 	my $prestr = sprintf "%${spacecount}s", $level;
 
-if ($shown++ < 1) {
-	print "\n\ntweets: ".Dumper($tweets)."\n\n";
-}
-
-foreach my $user ( @{ $tweets->{includes}->{users} } ) {
-	my $id = $user->{id};
-	if (!defined($id)) {
-		print "\n\nuser without id? ".Dumper($user)."\n\n";
-		next;
+	if ($shown++ < 1) {
+		print "\n\ntweets: ".Dumper($tweets)."\n\n";
 	}
-	my $who = $user->{username};
-	if (defined($umemcache->{$id})) {
-		next;
-	}
-	
-	$umemcache->{$id} = $user;
-	$umemcache->{$who} = $user;
-}
-foreach my $tweet ( @{ $tweets->{includes}->{tweets} } ) {
-	my $tid = $tweet->{id};
 
-	foreach my $var (%{ $tweet }) {
-		$tmemcache->{$tid}->{$var} = $tweet->{$var};
-	}
-}
-
-foreach my $media ( @{ $tweets->{includes}->{media} } ) {
-	my $mkey = $media->{media_key};
-
-	foreach my $var (%{ $media }) {
-		if (defined($mmemcache->{$mkey}->{$var})) {
+	foreach my $user ( @{ $tweets->{includes}->{users} } ) {
+		my $id = $user->{id};
+		if (!defined($id)) {
+			print "\n\nuser without id? ".Dumper($user)."\n\n";
 			next;
 		}
-		$mmemcache->{$mkey}->{$var} = $media->{$var};
-	}
-}
-	
-
-foreach my $tweet ( @{ $tweets->{data} } ) {
-	my $tid = $tweet->{id};
-	my $username = getuser_byid($tweet->{author_id})->{username};
-	my $status = "";
-	my $rstr = "";
-	my $text = "";
-	foreach my $ref ( @{ $tweet->{referenced_tweets} } ) {
-		my $tstr = $ref->{type};
-		my $recurse = 0;
-		if ($ref->{type} eq "replied_to") {
-			$tstr = "Re";
-			$status = "RP ";
-			$recurse++;
-		} elsif ($ref->{type} eq "retweeted") {
-			$tstr = "Rt";
-			$status = "RT ";
-			$recurse++;
-		} elsif ($ref->{type} eq "quoted") {
-			$tstr = "Quote";
-			$status = "Q ";
-			$recurse++;
-		} else {
-			$tstr = "Unknown(type=".$ref->{type}.")";
-			$status = "? ";
-		}
-		if ($recurse > 0) {
-			my $q = $client->get("tweets".
-			    "?ids=".$ref->{id}.
-			    "&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
-			    "&tweet.fields=created_at,referenced_tweets,author_id,in_reply_to_user_id".
-			    "&media.fields=url,variants,media_key,type"
-			);
-			$text .= expand_tweet($level + 1, $q );
-		}
-		if (length($rstr) > 0) {
-			$rstr .= ", ";
-		}
-		$rstr .= sprintf "%s %s", $tstr, $ref->{id};
-		#print "ref dump: ".Dumper($ref);
-		#print "\n";
-	}
-	if (length($rstr)>0) {
-		$rstr = ", $rstr";
-	}
-	my $ttext = $tweet->{text};
-	$ttext =~ s/[\n\r\f]/ /sg;
-	$ttext =~ s/\s+/ /g;
-	$ttext =~ s/\&amp;/\&/g;
-	
-	$returnstr .= sprintf "%s%25s \@%s %s%s (%d%s)\n", $prestr, $tweet->{created_at}, $username, $status, $ttext, $tid, $rstr;
-
-	foreach my $media ( @{ $tweet->{includes}->{media} } ) {
-		$returnstr .= expand_media($prestr, $media);
-	}
-	foreach my $mkey (@{ $tweet->{attachments}->{media_keys} }) {
-		#print "\nmkey: $mkey\n";
-		if (!defined($mmemcache->{$mkey})) {
-			print "mmemcache EEXIST for $mkey\n";
+		my $who = $user->{username};
+		if (defined($umemcache->{$id})) {
 			next;
 		}
-		$returnstr .= expand_media($prestr, $mmemcache->{$mkey} );
+
+		$umemcache->{$id} = $user;
+		$umemcache->{$who} = $user;
 	}
-			
-	$returnstr .= $text;
-	#$returnstr .= "${prestr} tweet dump: ".Dumper($tweet)."\n\n";
-}
+	foreach my $tweet ( @{ $tweets->{includes}->{tweets} } ) {
+		my $tid = $tweet->{id};
+
+		foreach my $var (%{ $tweet }) {
+			$tmemcache->{$tid}->{$var} = $tweet->{$var};
+		}
+	}
+
+	foreach my $media ( @{ $tweets->{includes}->{media} } ) {
+		my $mkey = $media->{media_key};
+
+		foreach my $var (%{ $media }) {
+			if (defined($mmemcache->{$mkey}->{$var})) {
+				next;
+			}
+			$mmemcache->{$mkey}->{$var} = $media->{$var};
+		}
+	}
+
+
+	foreach my $tweet ( @{ $tweets->{data} } ) {
+		my $tid = $tweet->{id};
+		my $username = getuser_byid($tweet->{author_id})->{username};
+		my $status = "";
+		my $rstr = "";
+		my $text = "";
+		foreach my $ref ( @{ $tweet->{referenced_tweets} } ) {
+			my $tstr = $ref->{type};
+			my $recurse = 0;
+			if ($ref->{type} eq "replied_to") {
+				$tstr = "Re";
+				$status = "RP ";
+				$recurse++;
+			} elsif ($ref->{type} eq "retweeted") {
+				$tstr = "Rt";
+				$status = "RT ";
+				$recurse++;
+			} elsif ($ref->{type} eq "quoted") {
+				$tstr = "Quote";
+				$status = "Q ";
+				$recurse++;
+			} else {
+				$tstr = "Unknown(type=".$ref->{type}.")";
+				$status = "? ";
+			}
+			if ($recurse > 0) {
+				my $q = $client->get("tweets".
+				    "?ids=".$ref->{id}.
+				    "&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
+				    "&tweet.fields=created_at,referenced_tweets,author_id,in_reply_to_user_id".
+				    "&media.fields=url,variants,media_key,type"
+				);
+				$text .= expand_tweet($level + 1, $q );
+			}
+			if (length($rstr) > 0) {
+				$rstr .= ", ";
+			}
+			$rstr .= sprintf "%s %s", $tstr, $ref->{id};
+			#print "ref dump: ".Dumper($ref);
+			#print "\n";
+		}
+		if (length($rstr)>0) {
+			$rstr = ", $rstr";
+		}
+		my $ttext = $tweet->{text};
+		$ttext =~ s/[\n\r\f]/ /sg;
+		$ttext =~ s/\s+/ /g;
+		$ttext =~ s/\&amp;/\&/g;
+
+		$returnstr .= sprintf "%s%25s \@%s %s%s (%d%s)\n", $prestr, $tweet->{created_at}, $username, $status, $ttext, $tid, $rstr;
+
+		foreach my $media ( @{ $tweet->{includes}->{media} } ) {
+			$returnstr .= expand_media($prestr, $media);
+		}
+		foreach my $mkey (@{ $tweet->{attachments}->{media_keys} }) {
+			#print "\nmkey: $mkey\n";
+			if (!defined($mmemcache->{$mkey})) {
+				print "mmemcache EEXIST for $mkey\n";
+				next;
+			}
+			$returnstr .= expand_media($prestr, $mmemcache->{$mkey} );
+		}
+
+		$returnstr .= $text;
+		#$returnstr .= "${prestr} tweet dump: ".Dumper($tweet)."\n\n";
+	}
 
 	return $returnstr;
 
