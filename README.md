@@ -2,12 +2,14 @@ lets play with twitter api
 
 Go get a deveoper key/secret, put in a conf file like so:
 
+```
 $ mkdir -p $HOME/.config/tapi
 $ cat <<EOF > $HOME/.config/tapi/tapi.conf
 [creds]
 consumer_key = <consumer_key>
 consumer_secret = <consumer_secret>
 EOF
+```
 
 Now get the access token and secret:
 
