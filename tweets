@@ -83,12 +83,24 @@ if ($maxres < 5) {
 if ($maxres > 100) {
 	$maxres = 100;
 }
+our $tweetfields = "tweet.fields=author_id,";
+$tweetfields .= "created_at,";
+#$tweetfields .= "context_annotations,"; # what concepts 
+$tweetfields .= "entities,";
+$tweetfields .= "public_metrics,";
+#$tweetfields .= "non_public_metrics,"; # be sure to only enable this on tweets I actually sent myself
+$tweetfields .= "referenced_tweets,";
+$tweetfields .= "in_reply_to_user_id,";
+$tweetfields .= "conversation_id";
 my $tweets = $client->get("users/${id}/tweets".
-	"?tweet.fields=created_at,referenced_tweets,author_id,in_reply_to_user_id".
+	"?${tweetfields}".
 	"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 	"&media.fields=url,variants,media_key,type".
 	"&max_results=${maxres}");
 our $shown = 1;
+if ($v > 0) {
+	$shown = 0;
+}
 print expand_tweet(0, $tweets);
 
 1;
@@ -180,6 +192,25 @@ sub expand_tweet {
 		foreach my $var (%{ $tweet }) {
 			$tmemcache->{$tid}->{$var} = $tweet->{$var};
 		}
+
+		# 'public_metrics' => { 'like_count' => 0, 'quote_count' => 0, 'retweet_count' => 0, 'reply_count' => 2 },
+		if ($tweet->{public_metrics}->{like_count} > 0 && !defined($tmemcache->{$tid}->{liking_users})) {
+			my $likes = $client->get("tweets/${tid}/liking_users".
+				"?max_results=100".
+				#"&expansions=pinned_tweet_id".
+				"&tweet.fields=conversation_id,entities,public_metrics".
+				# if recursing because > 100 likes, uncomment and populate below:
+				#"&pagination_token=".
+				"&user.fields=public_metrics"
+			);
+			#print "${tid} likes: ".Dumper($likes);
+			#print "\n";
+			#exit(0);
+			# XXX add to user cache?
+			foreach my $user (@{ $likes->{data} }) {
+				push @{$tmemcache->{$tid}->{liking_users}}, $user;
+			}
+		}
 	}
 
 	foreach my $media ( @{ $tweets->{includes}->{media} } ) {
@@ -226,7 +257,7 @@ sub expand_tweet {
 				my $q = $client->get("tweets".
 				    "?ids=".$ref->{id}.
 				    "&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
-				    "&tweet.fields=created_at,referenced_tweets,author_id,in_reply_to_user_id".
+				    "&${tweetfields}".
 				    "&media.fields=url,variants,media_key,type"
 				);
 				$text .= expand_tweet($level + 1, $q );
@@ -258,6 +289,15 @@ sub expand_tweet {
 				next;
 			}
 			$returnstr .= expand_media($prestr, $mmemcache->{$mkey} );
+		}
+		my $likestr = "";
+		foreach my $user (@{ $tmemcache->{$tid}->{liking_users} }) {
+			$likestr .= "\@".$user->{username}.", ";
+		}
+		if (length($likestr) > 0) {
+			$likestr = "Liked by ".$likestr;
+			$likestr =~ s/, $//;
+			$returnstr .= sprintf "%s%25s %s\n", $prestr, " ", $likestr;
 		}
 
 		$returnstr .= $text;
