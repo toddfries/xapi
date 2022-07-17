@@ -6,3 +6,12 @@
 0 2022-07-15T01:46:09.000Z @elonmusk RP @Erdayastronaut @SpaceX @Caspar_Stanley @IzanRamos2002 All mass necessitated by an engine design should count as engine mass, eg shrouds, TVC hydraulic power or excess purge gas. Raptors in production now have electric TVC, saving over a ton of hydraulics mass on booster. (1547759390513512455, Re 154758690560416563
 
 - roll oauth separate program into tweets setup process
+
+- use caching system with tapi.conf twiddled limits, something like
+
+  [cache]
+  refresh = 3600
+
+  .. where everything refreshes at 1h
+  .. consider looking at api limits and staying under on purpose with memo about trying agin in X minutes?
+  
