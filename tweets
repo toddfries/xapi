@@ -291,7 +291,7 @@ sub expand_tweet {
 			$returnstr .= expand_media($prestr, $mmemcache->{$mkey} );
 		}
 		my $likestr = "";
-		foreach my $user (@{ $tmemcache->{$tid}->{liking_users} }) {
+		foreach my $user (sort { $a->{username} cmp $b->{username} } @{ $tmemcache->{$tid}->{liking_users} }) {
 			$likestr .= "\@".$user->{username}.", ";
 		}
 		if (length($likestr) > 0) {
