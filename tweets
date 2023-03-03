@@ -101,6 +101,9 @@ our $shown = 1;
 if ($v > 0) {
 	$shown = 0;
 }
+if (!defined($tweets)) {
+	die "tweets for $id returned undef";
+}
 print expand_tweet(0, $tweets);
 
 1;
@@ -115,9 +118,13 @@ sub getuser_byname {
 	}
 
 	# cache the who -> id somewhere persistent to reduce api calls
-	$data = $client->get("users/by/username/$who")->{data};
+	my $res = $client->get("users/by/username/$who");
+	if (!defined($res)) {
+		die "empty result querying $who";
+	}
+	$data = $res->{data};
 	if (!defined($data)) {
-		die "empty data";
+		die "empty data ".Dumper($res);
 	}
 	if (!defined($data->{id})) {
 		print "ENOID: ";
