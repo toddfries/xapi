@@ -27,6 +27,7 @@ use Date::Manip;
 
 our $opt_b; # shows bookmarks
 our $opt_c; # config file
+our $opt_l; # chase likes
 our $opt_r; # desired resutls count
 our $opt_s; # show users profile stats
 our $opt_v; # verbosity
@@ -34,11 +35,12 @@ our $opt_v; # verbosity
 # defaults
 $opt_b = 0;
 $opt_c = $ENV{HOME}."/.config/tapi/tapi.conf";
+$opt_l = 0;
 $opt_r = 10;
 $opt_s = 0;
 $opt_v = 0;
 
-getopts('bc:r:sv');
+getopts('bc:lr:sv');
 
 if (!defined($opt_c)) {
 	die "Config file '${opt_c}' EEXIST";
@@ -242,7 +244,7 @@ sub expand_tweet {
 		}
 
 		# 'public_metrics' => { 'like_count' => 0, 'quote_count' => 0, 'retweet_count' => 0, 'reply_count' => 2 },
-		if (0 && $tweet->{public_metrics}->{like_count} > 0 && !defined($tmemcache->{$tid}->{liking_users})) {
+		if ($opt_l>0 && $tweet->{public_metrics}->{like_count} > 0 && !defined($tmemcache->{$tid}->{liking_users})) {
 			my ($likes,$c) = $client2->get("tweets/${tid}/liking_users".
 				"?max_results=100".
 				#"&expansions=pinned_tweet_id".
@@ -275,7 +277,7 @@ sub expand_tweet {
 
 	my $tcount = 0;
 	foreach my $tweet ( @{ $tweets->{data} } ) {
-		if ($tcount++ > $opt_r) {
+		if ($tcount++ >= $opt_r) {
 			last;
 		}
 		my $tid = $tweet->{id};
@@ -450,8 +452,8 @@ sub save_rates {
 		return;
 	}
 	my ($rl, $rlrem, $rlres) = (
-			$c->rate_limit_remaining,
 			$c->rate_limit,
+			$c->rate_limit_remaining,
 			$c->rate_limit_reset,
 	);
 	if (!defined($rl) || !defined($rlrem) || !defined($rlres)) {
@@ -473,17 +475,18 @@ sub diestat {
 
 	print STDERR $string;
 	show_stats();
+	exit(1);
 }
 sub show_stats {
 	foreach my $name (keys %{$smemcache}) {
 		my $start_res = $smemcache->{$name}->{start}->{rlres};
 		my $start_rem = $smemcache->{$name}->{start}->{rlrem};
-		my $res = $smemcache->{$name}->{last}->{rlres};
-		my $rem = $smemcache->{$name}->{last}->{rlrem};
+		my $last_res = $smemcache->{$name}->{last}->{rlres};
+		my $last_rem = $smemcache->{$name}->{last}->{rlrem};
 		my $rl = $smemcache->{$name}->{rl};
 		printf STDERR "%50s %d to %d/%d from %s to %s\n",
-			$name, $start_rem, $rem, $rl,
+			$name, $start_rem, $last_rem, $rl,
 			scalar localtime $start_res,
-			scalar localtime $res;
+			scalar localtime $last_res;
 	}
 }
