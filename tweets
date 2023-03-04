@@ -237,6 +237,7 @@ sub expand_tweet {
 		$umemcache->{$who} = $user;
 	}
 	foreach my $tweet ( @{ $tweets->{includes}->{tweets} } ) {
+		#diestat(" tweet: ". Dumper($tweet));
 		my $tid = $tweet->{id};
 
 		foreach my $var (%{ $tweet }) {
@@ -245,21 +246,25 @@ sub expand_tweet {
 
 		# 'public_metrics' => { 'like_count' => 0, 'quote_count' => 0, 'retweet_count' => 0, 'reply_count' => 2 },
 		if ($opt_l>0 && $tweet->{public_metrics}->{like_count} > 0 && !defined($tmemcache->{$tid}->{liking_users})) {
-			my ($likes,$c) = $client2->get("tweets/${tid}/liking_users".
+			my $pg = "";
+			while(1) {
+			    my ($likes,$c) = $client2->get("tweets/${tid}/liking_users".
 				"?max_results=100".
 				#"&expansions=pinned_tweet_id".
 				"&tweet.fields=conversation_id,entities,public_metrics".
-				# if recursing because > 100 likes, uncomment and populate below:
-				#"&pagination_token=".
-				"&user.fields=public_metrics"
-			);
-			save_rates("tweets/:id/liking_users", $c);
-			#print "${tid} likes: ".Dumper($likes);
-			#print "\n";
-			#exit(0);
-			# XXX add to user cache?
-			foreach my $user (@{ $likes->{data} }) {
-				push @{$tmemcache->{$tid}->{liking_users}}, $user;
+				"&user.fields=public_metrics".
+				$pg
+			    );
+			    save_rates("tweets/:id/liking_users", $c);
+			    foreach my $user (@{ $likes->{data} }) {
+				    push @{$tmemcache->{$tid}->{liking_users}}, $user;
+			    }
+			    my $rc = $likes->{meta}->{result_count};
+			    if (defined($likes->{meta}->{next_token}) && $rc == 100) {
+				$pg="&pagination_token=".$likes->{meta}->{next_token};
+				next;
+			    }
+			    last;
 			}
 		}
 	}
@@ -330,6 +335,26 @@ sub expand_tweet {
 		$ttext =~ s/\&amp;/\&/g;
 
 		$returnstr .= sprintf "%s%25s \@%s %s%s (%d%s)\n", $prestr, $tweet->{created_at}, $username, $status, $ttext, $tid, $rstr;
+		my ($plike, $prt, $preply, $pimp, $pquote) = (
+			$tweet->{public_metrics}->{like_count},
+			$tweet->{public_metrics}->{retweet_count},
+			$tweet->{public_metrics}->{impression_count},
+			$tweet->{public_metrics}->{quote_count},
+		);
+
+		if (!defined($plike)) {
+			$plike = 0;
+		}
+		if (!defined($prt)) {
+			$prt = 0;
+		}
+		if (!defined($preply)) {
+			$preply = 0;
+		}
+		if (!defined($pquote)) {
+			$pquote = 0;
+		}
+		$returnstr .= sprintf "%s %d/%d/%d/%d = Like/RT/Imp/Quote count\n", $prestr, $plike, $prt, $pimp, $pquote;
 
 		foreach my $media ( @{ $tweet->{includes}->{media} } ) {
 			$returnstr .= expand_media($prestr, $media);
@@ -462,7 +487,7 @@ sub save_rates {
 	my $nextreset = Date::Manip::Date->new();
 	$nextreset->parse( "epoch $rlres" );
 	if (!defined($smemcache->{$name})) {
-		$smemcache->{$name}->{start}->{rlrem} = $rlrem;
+		$smemcache->{$name}->{start}->{rlrem} = $rlrem-1;
 		$smemcache->{$name}->{start}->{rlres} = $rlres;
 		$smemcache->{$name}->{rl} = $rl;
 	}
