@@ -23,17 +23,22 @@ use Data::Dumper;
 use Getopt::Std;
 use ReadConf;
 use Twitter::API;
+use Date::Manip;
 
+our $opt_b; # shows bookmarks
 our $opt_c; # config file
 our $opt_r; # desired resutls count
+our $opt_s; # show users profile stats
 our $opt_v; # verbosity
 
 # defaults
+$opt_b = 0;
 $opt_c = $ENV{HOME}."/.config/tapi/tapi.conf";
 $opt_r = 10;
+$opt_s = 0;
 $opt_v = 0;
 
-getopts('c:r:v');
+getopts('bc:r:sv');
 
 if (!defined($opt_c)) {
 	die "Config file '${opt_c}' EEXIST";
@@ -48,10 +53,21 @@ if (!defined($c)) {
 	die "[creds] not found in tapi.conf";
 }
 
-our $client = Twitter::API->new_with_traits(
+our $client1 = Twitter::API->new_with_traits(
+	#api_version => '2',
+	#api_ext	=> '',
+	traits => [ qw/ApiMethods/ ],
+	#traits => [ qw/Enchilada/ ],
+	consumer_key	=> $c->{consumer_key},
+	consumer_secret => $c->{consumer_secret},
+	access_token	=> $c->{access_token},
+	access_token_secret => $c->{access_token_secret},
+);
+our $client2 = Twitter::API->new_with_traits(
 	api_version => '2',
 	api_ext	=> '',
 	traits => [ qw/ApiMethods/ ],
+	#traits => [ qw/Enchilada/ ],
 	consumer_key	=> $c->{consumer_key},
 	consumer_secret => $c->{consumer_secret},
 	access_token	=> $c->{access_token},
@@ -66,11 +82,9 @@ if (!defined($who)) {
 our $umemcache = { }; # users
 our $tmemcache = { }; # tweets
 our $mmemcache = { }; # media
+our $smemcache = { }; # stats
 
 our $v = $opt_v;
-
-my $data = getuser_byname($who);
-my $id = $data->{id};
 
 my $maxres = $opt_r;
 
@@ -83,6 +97,20 @@ if ($maxres < 5) {
 if ($maxres > 100) {
 	$maxres = 100;
 }
+
+if ($opt_s>0) {
+	show_status($who);
+	exit(0);
+}
+if ($opt_b>0) {
+	show_bookmarks();
+	exit(0);
+}
+
+my $data = getuser_byname($who);
+my $id = $data->{id};
+
+
 our $tweetfields = "tweet.fields=author_id,";
 $tweetfields .= "created_at,";
 #$tweetfields .= "context_annotations,"; # what concepts 
@@ -92,20 +120,23 @@ $tweetfields .= "public_metrics,";
 $tweetfields .= "referenced_tweets,";
 $tweetfields .= "in_reply_to_user_id,";
 $tweetfields .= "conversation_id";
-my $tweets = $client->get("users/${id}/tweets".
+
+my ($tweets, $context) = $client2->get("users/${id}/tweets".
 	"?${tweetfields}".
 	"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 	"&media.fields=url,variants,media_key,type".
 	"&max_results=${maxres}");
+save_rates("users/:d/tweets", $context);
 our $shown = 1;
 if ($v > 0) {
 	$shown = 0;
 }
 if (!defined($tweets)) {
-	die "tweets for $id returned undef";
+	diestat("tweets for $id returned undef");
 }
 print expand_tweet(0, $tweets);
 
+show_stats();
 1;
 
 sub getuser_byname {
@@ -118,17 +149,18 @@ sub getuser_byname {
 	}
 
 	# cache the who -> id somewhere persistent to reduce api calls
-	my $res = $client->get("users/by/username/$who");
+	my ($res,$c) = $client2->get("users/by/username/$who");
 	if (!defined($res)) {
-		die "empty result querying $who";
+		diestat("empty result querying $who");
 	}
+	save_rates("users/by/username/:handle", $c);
 	$data = $res->{data};
 	if (!defined($data)) {
-		die "empty data ".Dumper($res);
+		diestat("empty data ".Dumper($res));
 	}
 	if (!defined($data->{id})) {
 		print "ENOID: ";
-		die Dumper($data);
+		diestat(Dumper($data));
 	}
 	my $id = $data->{id};
 	#print "ucache miss ".$data->{id}."\n";
@@ -150,8 +182,10 @@ sub getuser_byid {
 		#print "ucache hit  ".$data->{id}."\n";
 		return $data;
 	}
-
-	$data = $client->get("users/${id}")->{data};
+	my $c;
+	($data, $c) = $client2->get("users/${id}");
+	save_rates("users/:id", $c);
+	$data = $data->{data};
 	my $who = $data->{username};
 	#print "ucache miss ".$data->{id}."\n";
 
@@ -209,7 +243,7 @@ sub expand_tweet {
 
 		# 'public_metrics' => { 'like_count' => 0, 'quote_count' => 0, 'retweet_count' => 0, 'reply_count' => 2 },
 		if (0 && $tweet->{public_metrics}->{like_count} > 0 && !defined($tmemcache->{$tid}->{liking_users})) {
-			my $likes = $client->get("tweets/${tid}/liking_users".
+			my ($likes,$c) = $client2->get("tweets/${tid}/liking_users".
 				"?max_results=100".
 				#"&expansions=pinned_tweet_id".
 				"&tweet.fields=conversation_id,entities,public_metrics".
@@ -217,6 +251,7 @@ sub expand_tweet {
 				#"&pagination_token=".
 				"&user.fields=public_metrics"
 			);
+			save_rates("tweets/:id/liking_users", $c);
 			#print "${tid} likes: ".Dumper($likes);
 			#print "\n";
 			#exit(0);
@@ -268,12 +303,13 @@ sub expand_tweet {
 				$status = "? ";
 			}
 			if ($recurse > 0) {
-				my $q = $client->get("tweets".
+				my ($q,$c) = $client2->get("tweets".
 				    "?ids=".$ref->{id}.
 				    "&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 				    "&${tweetfields}".
 				    "&media.fields=url,variants,media_key,type"
 				);
+				save_rates("tweets",$c);
 				$text .= expand_tweet($level + 1, $q );
 			}
 			if (length($rstr) > 0) {
@@ -350,4 +386,104 @@ sub expand_media {
 	}
 	$returnstr .= sprintf "%s%20s    %s\n", $prestr, " ", Dumper($media);
 	return $returnstr;
+}
+
+sub show_status {
+	my ($handle) = @_;
+	printf "show_status(%s)\n", $handle;
+
+	my $data;
+	$data = getuser_byname($handle);
+	my $id = $data->{id};
+
+	my ($me, $c) = $client1->verify_credentials;
+	save_rates("account/verify_credentials", $c);
+	my $favs = $me->{favourites_count};
+	my $friends = $me->{friends_count};
+	my $statuses = $me->{statuses_count};
+	my $followers = $me->{followers_count};
+	my $listed = $me->{listed_count};
+	printf " favs/friends/statuses/followers/listed = %d/%d/%d/%d/%d\n",
+		$favs, $friends, $statuses, $followers, $listed;
+
+	# seems this is unlimited calls?
+	($data, $c) = $client1->get("account/settings");
+	save_rates("account/settings", $c);
+	foreach my $v (('allow_contributor_request', 'allow_dms_from',
+		'language')) {
+		print "Account $v: ".$data->{$v}, "\n";
+	}
+
+	($data, $c) = $client2->get( "users/${id}/owned_lists" );
+	save_rates("users/:id/owned_lists", $c);
+	#print "owned lists: ", Dumper($data), "\n\n";
+	foreach my $d (@{ $data->{data} }) {
+		printf "%20d %s\n", $d->{id}, $d->{name};
+	}
+}
+
+sub show_bookmarks {
+	my ($handle) = @_;
+
+	my ($data, $c);
+	# unlimited calls!
+	$data = $client2->get( "users/me" );
+	save_rates("users/me", $c);
+	print "users/me: ", Dumper($data), "\n\n";
+
+	my $id = $data->{data}->{id};
+	my $maxres=100;
+	($data, $c) = $client2->get( "users/${id}/bookmarks");
+		# "?max_results=${maxres}&id=${id}");
+	save_rates("users/:d/bookmarks", $c);
+	print "bookmarks: ", Dumper($data), "\n\n";
+}
+
+sub save_rates {
+	my ($name, $c) = @_;
+
+	if (!defined($c) || length(ref($c)) < 1) {
+		return;
+	}
+	if (! (ref($c) eq "Twitter::API::Context") ) {
+		printf "c is a %s\n", ref($c);
+		return;
+	}
+	my ($rl, $rlrem, $rlres) = (
+			$c->rate_limit_remaining,
+			$c->rate_limit,
+			$c->rate_limit_reset,
+	);
+	if (!defined($rl) || !defined($rlrem) || !defined($rlres)) {
+		return;
+	}
+	my $nextreset = Date::Manip::Date->new();
+	$nextreset->parse( "epoch $rlres" );
+	if (!defined($smemcache->{$name})) {
+		$smemcache->{$name}->{start}->{rlrem} = $rlrem;
+		$smemcache->{$name}->{start}->{rlres} = $rlres;
+		$smemcache->{$name}->{rl} = $rl;
+	}
+	$smemcache->{$name}->{last}->{rlrem} = $rlrem;
+	$smemcache->{$name}->{last}->{rlres} = $rlres;
+	return;
+}
+sub diestat {
+	my ($string) = @_;
+
+	print STDERR $string;
+	show_stats();
+}
+sub show_stats {
+	foreach my $name (keys %{$smemcache}) {
+		my $start_res = $smemcache->{$name}->{start}->{rlres};
+		my $start_rem = $smemcache->{$name}->{start}->{rlrem};
+		my $res = $smemcache->{$name}->{last}->{rlres};
+		my $rem = $smemcache->{$name}->{last}->{rlrem};
+		my $rl = $smemcache->{$name}->{rl};
+		printf STDERR "%50s %d to %d/%d from %s to %s\n",
+			$name, $start_rem, $rem, $rl,
+			scalar localtime $start_res,
+			scalar localtime $res;
+	}
 }
