@@ -24,6 +24,7 @@ use Getopt::Std;
 use ReadConf;
 use Twitter::API;
 use Date::Manip;
+use POSIX qw(strftime);
 
 our $opt_b; # shows bookmarks
 our $opt_c; # config file
@@ -123,7 +124,7 @@ $tweetfields .= "referenced_tweets,";
 $tweetfields .= "in_reply_to_user_id,";
 $tweetfields .= "conversation_id";
 
-my ($tweets, $context) = $client2->get("users/${id}/tweets".
+my ($tweets, $context) = tv2("get","users/${id}/tweets".
 	"?${tweetfields}".
 	"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 	"&media.fields=url,variants,media_key,type".
@@ -151,7 +152,7 @@ sub getuser_byname {
 	}
 
 	# cache the who -> id somewhere persistent to reduce api calls
-	my ($res,$c) = $client2->get("users/by/username/$who");
+	my ($res,$c) = tv2("get","users/by/username/$who");
 	if (!defined($res)) {
 		diestat("empty result querying $who");
 	}
@@ -185,7 +186,7 @@ sub getuser_byid {
 		return $data;
 	}
 	my $c;
-	($data, $c) = $client2->get("users/${id}");
+	($data, $c) = tv2("get","users/${id}");
 	save_rates("users/:id", $c);
 	$data = $data->{data};
 	my $who = $data->{username};
@@ -247,8 +248,9 @@ sub expand_tweet {
 		# 'public_metrics' => { 'like_count' => 0, 'quote_count' => 0, 'retweet_count' => 0, 'reply_count' => 2 },
 		if ($opt_l>0 && $tweet->{public_metrics}->{like_count} > 0 && !defined($tmemcache->{$tid}->{liking_users})) {
 			my $pg = "";
+			my $ucount = 0;
 			while(1) {
-			    my ($likes,$c) = $client2->get("tweets/${tid}/liking_users".
+			    my ($likes,$c) = tv2("get","tweets/${tid}/liking_users".
 				"?max_results=100".
 				#"&expansions=pinned_tweet_id".
 				"&tweet.fields=conversation_id,entities,public_metrics".
@@ -257,13 +259,15 @@ sub expand_tweet {
 			    );
 			    save_rates("tweets/:id/liking_users", $c);
 			    foreach my $user (@{ $likes->{data} }) {
+				$ucount++;
 				    push @{$tmemcache->{$tid}->{liking_users}}, $user;
 			    }
 			    my $rc = $likes->{meta}->{result_count};
-			    if (defined($likes->{meta}->{next_token}) && $rc == 100) {
+			    if (defined($likes->{meta}->{next_token})) {
 				$pg="&pagination_token=".$likes->{meta}->{next_token};
 				next;
 			    }
+			    $tmemcache->{$tid}->{liking_count} = $ucount;
 			    last;
 			}
 		}
@@ -310,7 +314,7 @@ sub expand_tweet {
 				$status = "? ";
 			}
 			if ($recurse > 0) {
-				my ($q,$c) = $client2->get("tweets".
+				my ($q,$c) = tv2("get","tweets".
 				    "?ids=".$ref->{id}.
 				    "&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 				    "&${tweetfields}".
@@ -354,7 +358,7 @@ sub expand_tweet {
 		if (!defined($pquote)) {
 			$pquote = 0;
 		}
-		$returnstr .= sprintf "%s %d/%d/%d/%d = Like/RT/Imp/Quote count\n", $prestr, $plike, $prt, $pimp, $pquote;
+		$returnstr .= sprintf "%s%25s %d/%d/%d/%d = Like/RT/Imp/Quote count\n", $prestr, " ", $plike, $prt, $pimp, $pquote;
 
 		foreach my $media ( @{ $tweet->{includes}->{media} } ) {
 			$returnstr .= expand_media($prestr, $media);
@@ -372,7 +376,7 @@ sub expand_tweet {
 			$likestr .= "\@".$user->{username}.", ";
 		}
 		if (length($likestr) > 0) {
-			$likestr = "Liked by ".$likestr;
+			$likestr = "Liked by ".$tmemcache->{$tid}->{liking_count}.": ".$likestr;
 			$likestr =~ s/, $//;
 			$returnstr .= sprintf "%s%25s %s\n", $prestr, " ", $likestr;
 		}
@@ -434,14 +438,14 @@ sub show_status {
 		$favs, $friends, $statuses, $followers, $listed;
 
 	# seems this is unlimited calls?
-	($data, $c) = $client1->get("account/settings");
+	($data, $c) = tv1("get","account/settings");
 	save_rates("account/settings", $c);
 	foreach my $v (('allow_contributor_request', 'allow_dms_from',
 		'language')) {
 		print "Account $v: ".$data->{$v}, "\n";
 	}
 
-	($data, $c) = $client2->get( "users/${id}/owned_lists" );
+	($data, $c) = tv2("get", "users/${id}/owned_lists" );
 	save_rates("users/:id/owned_lists", $c);
 	#print "owned lists: ", Dumper($data), "\n\n";
 	foreach my $d (@{ $data->{data} }) {
@@ -454,13 +458,13 @@ sub show_bookmarks {
 
 	my ($data, $c);
 	# unlimited calls!
-	$data = $client2->get( "users/me" );
+	$data = tv2("get", "users/me" );
 	save_rates("users/me", $c);
 	print "users/me: ", Dumper($data), "\n\n";
 
 	my $id = $data->{data}->{id};
 	my $maxres=100;
-	($data, $c) = $client2->get( "users/${id}/bookmarks");
+	($data, $c) = tv2("get", "users/${id}/bookmarks");
 		# "?max_results=${maxres}&id=${id}");
 	save_rates("users/:d/bookmarks", $c);
 	print "bookmarks: ", Dumper($data), "\n\n";
@@ -499,6 +503,7 @@ sub diestat {
 	my ($string) = @_;
 
 	print STDERR $string;
+	print STDERR "\n";
 	show_stats();
 	exit(1);
 }
@@ -514,4 +519,53 @@ sub show_stats {
 			scalar localtime $start_res,
 			scalar localtime $last_res;
 	}
+}
+
+sub tv2 {
+	my ($type, $query) = @_;
+	my ($data, $c);
+
+	retry:
+	if ($type eq "get") {
+		eval {
+			($data, $c) = $client2->get($query);
+		};
+		if ($@) {
+			if (defined($c) && $c->rate_limit_remaining < 1) {
+				wait_till($c->rate_limit_reset);
+				goto retry;
+			}
+			diestat("tv2('get',$query):\n$@");
+		}
+		return ($data, $c);
+	}
+	diestat("tv2('${type}', $query): unhandled type");
+}
+sub tv1 {
+	my ($type, $query) = @_;
+	my ($data, $c);
+
+	if ($type eq "get") {
+		eval {
+			($data, $c) = $client1->get($query);
+		};
+		if ($@) {
+			diestat("tv1('get',$query): $@");
+		}
+		return ($data, $c);
+	}
+	diestat("tv1('${type}', $query): unhandled type");
+}
+
+sub wait_till {
+	my ($reset) = @_;
+
+	my $now = strftime( "%s", localtime);
+	my $res = strftime( "%s", localtime($reset));
+	if ($res <= $now) {
+		return;
+	}
+	printf STDERR "\nwait_till waiting %ds", $res - $now;
+	sleep($res - $now); # should we +1 to not be too fast?
+	printf STDERR " done.\n";
 }
