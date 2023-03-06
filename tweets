@@ -128,8 +128,7 @@ my ($tweets, $context) = tv2("get","users/${id}/tweets".
 	"?${tweetfields}".
 	"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 	"&media.fields=url,variants,media_key,type".
-	"&max_results=${maxres}");
-save_rates("users/:d/tweets", $context);
+	"&max_results=${maxres}", "users/:id/tweets");
 our $shown = 1;
 if ($v > 0) {
 	$shown = 0;
@@ -152,11 +151,10 @@ sub getuser_byname {
 	}
 
 	# cache the who -> id somewhere persistent to reduce api calls
-	my ($res,$c) = tv2("get","users/by/username/$who");
+	my ($res,$c) = tv2("get","users/by/username/$who","users/by/username/:handle");
 	if (!defined($res)) {
 		diestat("empty result querying $who");
 	}
-	save_rates("users/by/username/:handle", $c);
 	$data = $res->{data};
 	if (!defined($data)) {
 		diestat("empty data ".Dumper($res));
@@ -186,8 +184,7 @@ sub getuser_byid {
 		return $data;
 	}
 	my $c;
-	($data, $c) = tv2("get","users/${id}");
-	save_rates("users/:id", $c);
+	($data, $c) = tv2("get","users/${id}","users/:id");
 	$data = $data->{data};
 	my $who = $data->{username};
 	#print "ucache miss ".$data->{id}."\n";
@@ -255,9 +252,8 @@ sub expand_tweet {
 				#"&expansions=pinned_tweet_id".
 				"&tweet.fields=conversation_id,entities,public_metrics".
 				"&user.fields=public_metrics".
-				$pg
+				$pg, "tweets/:id/liking_users",
 			    );
-			    save_rates("tweets/:id/liking_users", $c);
 			    foreach my $user (@{ $likes->{data} }) {
 				$ucount++;
 				    push @{$tmemcache->{$tid}->{liking_users}}, $user;
@@ -318,9 +314,8 @@ sub expand_tweet {
 				    "?ids=".$ref->{id}.
 				    "&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 				    "&${tweetfields}".
-				    "&media.fields=url,variants,media_key,type"
+				    "&media.fields=url,variants,media_key,type","tweets",
 				);
-				save_rates("tweets",$c);
 				$text .= expand_tweet($level + 1, $q );
 			}
 			if (length($rstr) > 0) {
@@ -445,8 +440,7 @@ sub show_status {
 		print "Account $v: ".$data->{$v}, "\n";
 	}
 
-	($data, $c) = tv2("get", "users/${id}/owned_lists" );
-	save_rates("users/:id/owned_lists", $c);
+	($data, $c) = tv2("get", "users/${id}/owned_lists", "users/:id/owned_lists");
 	#print "owned lists: ", Dumper($data), "\n\n";
 	foreach my $d (@{ $data->{data} }) {
 		printf "%20d %s\n", $d->{id}, $d->{name};
@@ -458,15 +452,13 @@ sub show_bookmarks {
 
 	my ($data, $c);
 	# unlimited calls!
-	$data = tv2("get", "users/me" );
-	save_rates("users/me", $c);
+	$data = tv2("get", "users/me", "users/me" );
 	print "users/me: ", Dumper($data), "\n\n";
 
 	my $id = $data->{data}->{id};
 	my $maxres=100;
-	($data, $c) = tv2("get", "users/${id}/bookmarks");
+	($data, $c) = tv2("get", "users/${id}/bookmarks", "users/:id/bookmarks");
 		# "?max_results=${maxres}&id=${id}");
-	save_rates("users/:d/bookmarks", $c);
 	print "bookmarks: ", Dumper($data), "\n\n";
 }
 
@@ -490,7 +482,7 @@ sub save_rates {
 	}
 	my $nextreset = Date::Manip::Date->new();
 	$nextreset->parse( "epoch $rlres" );
-	if (!defined($smemcache->{$name})) {
+	if (!defined($smemcache->{$name}->{start}->{rlrem})) {
 		$smemcache->{$name}->{start}->{rlrem} = $rlrem-1;
 		$smemcache->{$name}->{start}->{rlres} = $rlres;
 		$smemcache->{$name}->{rl} = $rl;
@@ -514,6 +506,9 @@ sub show_stats {
 		my $last_res = $smemcache->{$name}->{last}->{rlres};
 		my $last_rem = $smemcache->{$name}->{last}->{rlrem};
 		my $rl = $smemcache->{$name}->{rl};
+		if (!defined($rl) || !defined($start_res) || !defined($start_rem)) {
+			return;
+		}
 		printf STDERR "%50s %d to %d/%d from %s to %s\n",
 			$name, $start_rem, $last_rem, $rl,
 			scalar localtime $start_res,
@@ -522,8 +517,16 @@ sub show_stats {
 }
 
 sub tv2 {
-	my ($type, $query) = @_;
+	my ($type, $query, $ratename) = @_;
 	my ($data, $c);
+
+	if (defined($ratename)) {
+		my $rem = $smemcache->{$ratename}->{last}->{rlrem};
+		my $res = $smemcache->{$ratename}->{last}->{rlres};
+		if (defined($rem) && defined($res) && $rem < 5) {
+			wait_till($res);
+		}
+	}
 
 	retry:
 	if ($type eq "get") {
@@ -536,6 +539,9 @@ sub tv2 {
 				goto retry;
 			}
 			diestat("tv2('get',$query):\n$@");
+		}
+		if (defined($ratename)) {
+			save_rates($ratename, $c);
 		}
 		return ($data, $c);
 	}
