@@ -452,7 +452,7 @@ sub show_bookmarks {
 
 	my ($data, $c);
 	# unlimited calls!
-	$data = tv2("get", "users/me", "users/me" );
+	($data, $c) = tv2("get", "users/me", "users/me" );
 	print "users/me: ", Dumper($data), "\n\n";
 
 	my $id = $data->{data}->{id};
