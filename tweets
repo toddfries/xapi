@@ -16,32 +16,41 @@
 
 use strict;
 use warnings;
+
 use utf8;
 use open qw/:std :utf8/;
 
 use Data::Dumper;
-use Getopt::Std;
-use ReadConf;
-use Twitter::API;
 use Date::Manip;
+use Getopt::Std;
 use POSIX qw(strftime);
+use ReadConf;
+use Sys::Syslog;
+use Twitter::API;
+
+my $ident = "tweets";
+my $logopt = 'pid';
+my $facility = 'user';
 
 our $opt_b; # shows bookmarks
 our $opt_c; # config file
 our $opt_l; # chase likes
 our $opt_r; # desired resutls count
 our $opt_s; # show users profile stats
+our $opt_S; # show users profile stats
 our $opt_v; # verbosity
+our $opt_L; # show owned lists
 
 # defaults
 $opt_b = 0;
 $opt_c = $ENV{HOME}."/.config/tapi/tapi.conf";
 $opt_l = 0;
+$opt_L = 0;
 $opt_r = 10;
 $opt_s = 0;
 $opt_v = 0;
 
-getopts('bc:lr:sv');
+getopts('bc:lr:svSL');
 
 if (!defined($opt_c)) {
 	die "Config file '${opt_c}' EEXIST";
@@ -77,17 +86,39 @@ our $client2 = Twitter::API->new_with_traits(
 	access_token_secret => $c->{access_token_secret},
 );
 
-my $who = $ARGV[0];
-if (!defined($who)) {
-	die "need a username on cli";
-}
-
 our $umemcache = { }; # users
 our $tmemcache = { }; # tweets
 our $mmemcache = { }; # media
 our $smemcache = { }; # stats
 
 our $v = $opt_v;
+
+openlog($ident, $logopt, $facility);
+
+if ($opt_s>0) {
+	show_mystats();
+	show_stats();
+	exit(0);
+}
+
+if ($opt_b>0) {
+	show_bookmarks();
+	show_stats();
+	exit(0);
+}
+
+my $who = $ARGV[0];
+if (!defined($who)) {
+	die "need a username on cli";
+}
+
+if (defined($opt_S)) {
+	foreach my $who (@ARGV) {
+		show_ustats($who);
+	}
+	show_stats();
+	exit(0);
+}
 
 my $maxres = $opt_r;
 
@@ -101,12 +132,9 @@ if ($maxres > 100) {
 	$maxres = 100;
 }
 
-if ($opt_s>0) {
-	show_status($who);
-	exit(0);
-}
-if ($opt_b>0) {
-	show_bookmarks();
+if ($opt_L>0) {
+	show_owned_lists($who);
+	show_stats();
 	exit(0);
 }
 
@@ -413,15 +441,47 @@ sub expand_media {
 	$returnstr .= sprintf "%s%20s    %s\n", $prestr, " ", Dumper($media);
 	return $returnstr;
 }
-
-sub show_status {
+sub show_ustats {
 	my ($handle) = @_;
-	printf "show_status(%s)\n", $handle;
 
-	my $data;
-	$data = getuser_byname($handle);
-	my $id = $data->{id};
+	# https://developer.twitter.com/en/docs/twitter-api/users/lookup/api-reference/get-users-by-username-username
+	# epansions=pinned_tweet_id
+	# user.fields=public_metrics,username,verified,verified_type,withheld,...
+	my $xtra="?user.fields=public_metrics,username,verified,verified_type,withheld,url,entities,location";
+	my ($res,$c) = tv2("get","users/by/username/$handle$xtra","users/by/username/:handle");
+	if (!defined($res)) {
+		diestat("empty result querying $handle");
+	}
+	$data = $res->{data};
+	if (!defined($data)) {
+		diestat("empty data ".Dumper($res));
+	}
+	my $verify;
+	if ($data->{verified}) {
+		$verify=sprintf "(%s)", $data->{verified_type};
+	} else {
+		$verify="";
+	}
+	my $url="";
+	if (defined($data->{url})) {
+		$url=", url ".$data->{url};
+	}
+	#print Dumper($data);
+	my $pm=$data->{public_metrics};
+	my $output = "";
+	$output = sprintf "%s%s[%d]: ", $data->{username}, $verify, $data->{id};
+	$output.= sprintf " %d following, %d statuses, %d followers, %d listed%s\n",
+		$pm->{following_count},
+		$pm->{tweet_count},
+		$pm->{followers_count},
+		$pm->{listed_count},
+		$url;
+	print $output;
+	syslog('info', $output);
+	
+}
 
+sub show_mystats {
 	my ($me, $c) = $client1->verify_credentials;
 	save_rates("account/verify_credentials", $c);
 	my $favs = $me->{favourites_count};
@@ -429,16 +489,53 @@ sub show_status {
 	my $statuses = $me->{statuses_count};
 	my $followers = $me->{followers_count};
 	my $listed = $me->{listed_count};
-	printf " favs/friends/statuses/followers/listed = %d/%d/%d/%d/%d\n",
+	my $screen_name = $me->{screen_name};
+	my $output = "";
+	$output .= sprintf "%s: ", $screen_name;
+	$output .= sprintf " %d favs, %d friends, %d statuses, %d followers, %d listed\n",
 		$favs, $friends, $statuses, $followers, $listed;
+	print $output;
+	syslog('info', $output);
+	#print Dumper($me)."\n";
+	if ($v<1) {
+		return;
+	}
 
 	# seems this is unlimited calls?
 	($data, $c) = tv1("get","account/settings");
 	save_rates("account/settings", $c);
+	my $seen = { };
 	foreach my $v (('allow_contributor_request', 'allow_dms_from',
 		'language')) {
+		$seen->{$v} = 1;
 		print "Account $v: ".$data->{$v}, "\n";
 	}
+	foreach my $v (sort keys %{$data}) {
+		if (defined($seen->{$v})) {
+			next;
+		}
+		if (ref($data->{$v}) eq "") {
+			print "Account $v= ".$data->{$v}."\n";
+			next;
+		}
+		if (ref($data->{$v}) eq "HASH") {
+			my %info = %{$data->{$v}};
+			foreach my $t (sort keys %info) {
+				print "Account ${v}{$t}= ".$info{$t}."\n";
+			}
+			next;
+		}
+		print " data->{$v} is a ".ref($data->{$v}).": ";
+		print Dumper($data->{$v})."\n";
+	}
+}
+sub show_owned_lists {
+	my ($handle) = @_;
+
+	my $data;
+	$data = getuser_byname($handle);
+	my $id = $data->{id};
+
 
 	($data, $c) = tv2("get", "users/${id}/owned_lists", "users/:id/owned_lists");
 	#print "owned lists: ", Dumper($data), "\n\n";
@@ -448,7 +545,6 @@ sub show_status {
 }
 
 sub show_bookmarks {
-	my ($handle) = @_;
 
 	my ($data, $c);
 	# unlimited calls!
@@ -510,7 +606,7 @@ sub show_stats {
 			return;
 		}
 		printf STDERR "%50s %d to %d/%d from %s to %s\n",
-			$name, $start_rem, $last_rem, $rl,
+			$name, $last_rem, $start_rem, $rl,
 			scalar localtime $start_res,
 			scalar localtime $last_res;
 	}
