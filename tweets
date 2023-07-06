@@ -38,6 +38,7 @@ our $opt_l; # chase likes
 our $opt_r; # desired resutls count
 our $opt_s; # show users profile stats
 our $opt_S; # show users profile stats
+our $opt_T; # show an individual tweet
 our $opt_v; # verbosity
 our $opt_L; # show owned lists
 
@@ -50,7 +51,7 @@ $opt_r = 10;
 $opt_s = 0;
 $opt_v = 0;
 
-getopts('bc:lr:svSL');
+getopts('bc:lr:svST:L');
 
 if (!defined($opt_c)) {
 	die "Config file '${opt_c}' EEXIST";
@@ -106,6 +107,38 @@ if ($opt_b>0) {
 	show_stats();
 	exit(0);
 }
+
+if (defined($opt_T)) {
+	use Try::Tiny;
+	# tweet.fields [attachments,author_id,context_annotations,conversation_id,created_at,edit_controls,edit_history_tweet_ids,entities,geo,id,in_reply_to_user_id,lang,non_public_metrics,organic_metrics,possibly_sensitive,promoted_metrics,public_metrics,referenced_tweets,reply_settings,source,text,withheld]
+	my $query = "tweet.fields=withheld,geo,attachments,author_id,created_at,entities,public_metrics,context_annotations,conversation_id,lang,source,text,possibly_sensitive".
+	"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
+	# media_fields [alt_text,duration_ms,height,media_key,non_public_metrics,organic_metrics,preview_image_url,promoted_metrics,public_metrics,type,url,variants,width]
+	"&media.fields=url,variants,media_key,type,alt_text,duration_ms,public_metrics".
+	# user.fields [created_at,description,entities,id,location,name,pinned_tweet_id,profile_image_url,protected,public_metrics,url,username,verified,verified_type,withheld]
+	"&user.fields=username,withheld,protected,created_at,public_metrics,verified,verified_type";
+	#$query = "tweet.fields=lang,author_id,attachments,created_at,public_metrics&user.fields=created_at";
+	#$query = "tweet.fields=created_at&expansions=author_id&user.fields=created_at";
+	foreach my $t (split(/\s+,\s+/,$opt_T)) {
+		my ($tweets, $context);
+
+		#if ($t =~ /,/) {
+			($tweets, $context) = tv2("get","tweets?ids=${t}&$query");
+		#} else {
+		#	try {
+		#		($tweets, $context) = tv2("get","tweets/${t}?${query}");
+		#	}
+		#	catch {
+		#		print $_->http_request->as_string."\n";
+		#		print "twitter error code: ".$_->twitter_error_code."\n";
+		#	};
+		#}
+		print expand_tweet(0, $tweets);
+	}
+	show_stats();
+	exit(0);
+}
+	
 
 my $who = $ARGV[0];
 if (!defined($who)) {
@@ -244,7 +277,7 @@ sub expand_tweet {
 	my $spacecount = $level * 4+1;
 	my $prestr = sprintf "%${spacecount}s", $level;
 
-	if ($shown++ < 1) {
+	if ($v > 0) {
 		print "\n\ntweets: ".Dumper($tweets)."\n\n";
 	}
 
@@ -381,6 +414,9 @@ sub expand_tweet {
 		if (!defined($pquote)) {
 			$pquote = 0;
 		}
+		if (!defined($pimp)) {
+			$pimp = 0;
+		}
 		$returnstr .= sprintf "%s%25s %d/%d/%d/%d = Like/RT/Imp/Quote count\n", $prestr, " ", $plike, $prt, $pimp, $pquote;
 
 		foreach my $media ( @{ $tweet->{includes}->{media} } ) {
@@ -423,6 +459,10 @@ sub expand_media {
 		return $returnstr;
 	}
 	if ($media->{type} =~ /^(video|animated_gif)/) {
+		my $vc = $media->{public_metrics}->{view_count};
+		if (defined($vc)) {
+			$returnstr .= sprintf "%s%25d views\n", $prestr, $vc;
+		}
 		foreach my $v ( @{ $media->{variants} } ) {
 			$v->{content_type} =~ s/application/app/;
 			my $bitrate = $v->{bit_rate};
@@ -483,6 +523,9 @@ sub show_ustats {
 
 sub show_mystats {
 	my ($me, $c) = $client1->verify_credentials;
+	if ($opt_v>0) {
+		print "query=account/verify_credentials\n";
+	}
 	save_rates("account/verify_credentials", $c);
 	my $favs = $me->{favourites_count};
 	my $friends = $me->{friends_count};
@@ -614,6 +657,9 @@ sub show_stats {
 
 sub tv2 {
 	my ($type, $query, $ratename) = @_;
+	if ($opt_v>0) {
+		print "query=${query}\n";
+	}
 	my ($data, $c);
 
 	if (defined($ratename)) {
@@ -645,6 +691,9 @@ sub tv2 {
 }
 sub tv1 {
 	my ($type, $query) = @_;
+	if ($opt_v>0) {
+		print "query=${query}\n";
+	}
 	my ($data, $c);
 
 	if ($type eq "get") {
