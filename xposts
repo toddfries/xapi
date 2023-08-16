@@ -45,7 +45,7 @@ our $opt_L; # show owned lists
 
 # defaults
 $opt_b = 0;
-$opt_c = $ENV{HOME}."/.config/tapi/tapi.conf";
+$opt_c = $ENV{HOME}."/.config/xapi/xapi.conf";
 $opt_l = 0;
 $opt_L = 0;
 $opt_r = 10;
@@ -64,7 +64,7 @@ my $conf = $rc->readconf($opt_c);
 my $c = $conf->{creds};
 
 if (!defined($c)) {
-	die "[creds] not found in tapi.conf";
+	die "[creds] not found in xapi.conf";
 }
 
 our $client1 = Twitter::API->new_with_traits(
