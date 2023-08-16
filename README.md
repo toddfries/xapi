@@ -1,10 +1,10 @@
-lets play with twitter api
+lets play with the 𝕏 api
 
 Go get a deveoper key/secret, put in a conf file like so:
 
 ```
-$ mkdir -p $HOME/.config/tapi
-$ cat <<EOF > $HOME/.config/tapi/tapi.conf
+$ mkdir -p $HOME/.config/xapi
+$ cat <<EOF > $HOME/.config/xapi/xapi.conf
 [creds]
 consumer_key = <consumer_key>
 consumer_secret = <consumer_secret>
@@ -21,11 +21,11 @@ Then, enter the returned PIN number displayed in the browser: <pincode from brow
 access_token.......: <access_token>
 access_token_secret: <access_token_secret>
 ...
-$ cat <<EOF >> $HOME/.config/tapi/tapi.conf
+$ cat <<EOF >> $HOME/.config/xapi/xapi.conf
 access_token = <access_token>
 access_token_secret = <access_token_secret>
 EOF
-$ tweets unix2mars
+$ xposts unix2mars
 ...
 0 2022-07-13T20:33:03.000Z @unix2mars RT Another level nested again. (1547318208583143425, Re 1547318135841226753)
     1 2022-07-13T20:32:46.000Z @unix2mars RT Reply of reply test. (1547318135841226753, Re 1547318006996508672)
