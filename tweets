@@ -34,6 +34,7 @@ my $facility = 'user';
 
 our $opt_b; # shows bookmarks
 our $opt_c; # config file
+our $opt_j; # arbitrary query to get json output
 our $opt_l; # chase likes
 our $opt_r; # desired resutls count
 our $opt_s; # show users profile stats
@@ -51,7 +52,7 @@ $opt_r = 10;
 $opt_s = 0;
 $opt_v = 0;
 
-getopts('bc:lr:svST:L');
+getopts('bc:j:lr:svST:L');
 
 if (!defined($opt_c)) {
 	die "Config file '${opt_c}' EEXIST";
@@ -101,6 +102,15 @@ if ($opt_s>0) {
 	show_stats();
 	exit(0);
 }
+
+if (defined($opt_j)) {
+	my ($data, $c) = tv2("get", $opt_j, $opt_j );
+	print Dumper($data);
+	show_stats();
+	exit(0);
+}
+	
+	
 
 if ($opt_b>0) {
 	show_bookmarks();
