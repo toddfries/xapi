@@ -28,7 +28,7 @@ use ReadConf;
 use Sys::Syslog;
 use Twitter::API;
 
-my $ident = "tweets";
+my $ident = "Xposts";
 my $logopt = 'pid';
 my $facility = 'user';
 
@@ -39,7 +39,7 @@ our $opt_l; # chase likes
 our $opt_r; # desired resutls count
 our $opt_s; # show users profile stats
 our $opt_S; # show users profile stats
-our $opt_T; # show an individual tweet
+our $opt_T; # show an individual post
 our $opt_v; # verbosity
 our $opt_L; # show owned lists
 
@@ -89,7 +89,7 @@ our $client2 = Twitter::API->new_with_traits(
 );
 
 our $umemcache = { }; # users
-our $tmemcache = { }; # tweets
+our $pmemcache = { }; # posts
 our $mmemcache = { }; # media
 our $smemcache = { }; # stats
 
@@ -190,7 +190,7 @@ $tweetfields .= "created_at,";
 #$tweetfields .= "context_annotations,"; # what concepts 
 $tweetfields .= "entities,";
 $tweetfields .= "public_metrics,";
-#$tweetfields .= "non_public_metrics,"; # be sure to only enable this on tweets I actually sent myself
+#$tweetfields .= "non_public_metrics,"; # be sure to only enable this on posts I actually sent myself
 $tweetfields .= "referenced_tweets,";
 $tweetfields .= "in_reply_to_user_id,";
 $tweetfields .= "conversation_id";
@@ -222,7 +222,7 @@ sub getuser_byname {
 	}
 
 	# cache the who -> id somewhere persistent to reduce api calls
-	my ($res,$c) = tv2("get","users/by/username/$who","users/by/username/:handle");
+	my ($res,$c) = tv2("get","users/by/username/$who","users/by/username/:username");
 	if (!defined($res)) {
 		diestat("empty result querying $who");
 	}
@@ -233,6 +233,9 @@ sub getuser_byname {
 	if (!defined($data->{id})) {
 		print "ENOID: ";
 		diestat(Dumper($data));
+	}
+	if ($opt_v>0) {
+		print Dumper($data);
 	}
 	my $id = $data->{id};
 	#print "ucache miss ".$data->{id}."\n";
@@ -310,11 +313,11 @@ sub expand_tweet {
 		my $tid = $tweet->{id};
 
 		foreach my $var (%{ $tweet }) {
-			$tmemcache->{$tid}->{$var} = $tweet->{$var};
+			$pmemcache->{$tid}->{$var} = $tweet->{$var};
 		}
 
 		# 'public_metrics' => { 'like_count' => 0, 'quote_count' => 0, 'retweet_count' => 0, 'reply_count' => 2 },
-		if ($opt_l>0 && $tweet->{public_metrics}->{like_count} > 0 && !defined($tmemcache->{$tid}->{liking_users})) {
+		if ($opt_l>0 && $tweet->{public_metrics}->{like_count} > 0 && !defined($pmemcache->{$tid}->{liking_users})) {
 			my $pg = "";
 			my $ucount = 0;
 			while(1) {
@@ -327,14 +330,14 @@ sub expand_tweet {
 			    );
 			    foreach my $user (@{ $likes->{data} }) {
 				$ucount++;
-				    push @{$tmemcache->{$tid}->{liking_users}}, $user;
+				    push @{$pmemcache->{$tid}->{liking_users}}, $user;
 			    }
 			    my $rc = $likes->{meta}->{result_count};
 			    if (defined($likes->{meta}->{next_token})) {
 				$pg="&pagination_token=".$likes->{meta}->{next_token};
 				next;
 			    }
-			    $tmemcache->{$tid}->{liking_count} = $ucount;
+			    $pmemcache->{$tid}->{liking_count} = $ucount;
 			    last;
 			}
 		}
@@ -441,11 +444,11 @@ sub expand_tweet {
 			$returnstr .= expand_media($prestr, $mmemcache->{$mkey} );
 		}
 		my $likestr = "";
-		foreach my $user (sort { $a->{username} cmp $b->{username} } @{ $tmemcache->{$tid}->{liking_users} }) {
+		foreach my $user (sort { $a->{username} cmp $b->{username} } @{ $pmemcache->{$tid}->{liking_users} }) {
 			$likestr .= "\@".$user->{username}.", ";
 		}
 		if (length($likestr) > 0) {
-			$likestr = "Liked by ".$tmemcache->{$tid}->{liking_count}.": ".$likestr;
+			$likestr = "Liked by ".$pmemcache->{$tid}->{liking_count}.": ".$likestr;
 			$likestr =~ s/, $//;
 			$returnstr .= sprintf "%s%25s %s\n", $prestr, " ", $likestr;
 		}
@@ -537,6 +540,9 @@ sub show_mystats {
 		print "query=account/verify_credentials\n";
 	}
 	save_rates("account/verify_credentials", $c);
+	if (defined($me) && $opt_v > 0) {
+		print Dumper($me);
+	}
 	my $favs = $me->{favourites_count};
 	my $friends = $me->{friends_count};
 	my $statuses = $me->{statuses_count};
@@ -567,7 +573,7 @@ sub show_mystats {
 		if (defined($seen->{$v})) {
 			next;
 		}
-		if (ref($data->{$v}) eq "") {
+		if (defined($data->{$v}) && ref($data->{$v}) eq "") {
 			print "Account $v= ".$data->{$v}."\n";
 			next;
 		}
@@ -689,6 +695,9 @@ sub tv2 {
 			if (defined($c) && $c->rate_limit_remaining < 1) {
 				wait_till($c->rate_limit_reset);
 				goto retry;
+			}
+			if (defined($data) && $opt_v>0) {
+				print Dumper($data);
 			}
 			diestat("tv2('get',$query):\n$@");
 		}
