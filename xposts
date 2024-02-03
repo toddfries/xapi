@@ -27,6 +27,7 @@ use POSIX qw(strftime);
 use ReadConf;
 use Sys::Syslog;
 use Twitter::API;
+use JSON;
 
 my $ident = "Xposts";
 my $logopt = 'pid';
@@ -36,12 +37,17 @@ our $opt_b; # shows bookmarks
 our $opt_c; # config file
 our $opt_j; # arbitrary query to get json output
 our $opt_l; # chase likes
+our $opt_q; # quiet
 our $opt_r; # desired resutls count
 our $opt_s; # show users profile stats
 our $opt_S; # show users profile stats
 our $opt_T; # show an individual post
 our $opt_v; # verbosity
 our $opt_L; # show owned lists
+our $opt_N; # no syslog
+
+our $opt_w; # write a tweet message $opt_w is message
+our $opt_d; # write a dm message $opt_d is uid, $ARGV[0] is message
 
 # defaults
 $opt_b = 0;
@@ -52,7 +58,7 @@ $opt_r = 10;
 $opt_s = 0;
 $opt_v = 0;
 
-getopts('bc:j:lr:svST:L');
+getopts('bc:d:j:lqr:svw:ST:LN');
 
 if (!defined($opt_c)) {
 	die "Config file '${opt_c}' EEXIST";
@@ -148,6 +154,29 @@ if (defined($opt_T)) {
 	show_stats();
 	exit(0);
 }
+
+if (defined($opt_w)) {
+	my $msg = $opt_w;
+	my $payload = {
+		-to_json => {
+			text => $msg,
+			reply_settings => "mentionedUsers",
+		},
+	};
+	my @res = tv2("post", "tweets", $payload);
+	print Dumper(@res);
+	exit(0);
+}
+if (defined($opt_d)) {
+	my $uid = $opt_d;
+	my $msg = $ARGV[0];
+	my $payload = {
+		text => $msg,
+	};
+	my @res = tv2("post", "dm_conversations/with/${uid}/messages", $payload);
+	print Dumper(@res);
+	exit(0);
+}
 	
 
 my $who = $ARGV[0];
@@ -207,7 +236,9 @@ if ($v > 0) {
 if (!defined($tweets)) {
 	diestat("tweets for $id returned undef");
 }
-print expand_tweet(0, $tweets);
+if (! defined($opt_q)) {
+	print expand_tweet(0, $tweets);
+}
 
 show_stats();
 1;
@@ -529,8 +560,12 @@ sub show_ustats {
 		$pm->{followers_count},
 		$pm->{listed_count},
 		$url;
-	print $output;
-	syslog('info', $output);
+	if (!defined($opt_q)) {
+		print $output;
+	}
+	if (!defined($opt_N)) {
+		syslog('info', $output);
+	}
 	
 }
 
@@ -553,8 +588,12 @@ sub show_mystats {
 	$output .= sprintf "%s: ", $screen_name;
 	$output .= sprintf " %d favs, %d friends, %d statuses, %d followers, %d listed\n",
 		$favs, $friends, $statuses, $followers, $listed;
-	print $output;
-	syslog('info', $output);
+	if (!defined($opt_q)) {
+		print $output;
+	}
+	if (!defined($opt_N)) {
+		syslog('info', $output);
+	}
 	#print Dumper($me)."\n";
 	if ($v<1) {
 		return;
@@ -655,6 +694,9 @@ sub diestat {
 	exit(1);
 }
 sub show_stats {
+	if (defined($opt_q)) {
+		return;
+	}
 	foreach my $name (keys %{$smemcache}) {
 		my $start_res = $smemcache->{$name}->{start}->{rlres};
 		my $start_rem = $smemcache->{$name}->{start}->{rlrem};
@@ -672,9 +714,14 @@ sub show_stats {
 }
 
 sub tv2 {
-	my ($type, $query, $ratename) = @_;
+	my ($type, $query, $ratename, $tmp) = @_;
+	my $pdata;
 	if ($opt_v>0) {
 		print "query=${query}\n";
+	}
+	if ($type eq "post") {
+		$pdata = $ratename;
+		$ratename = $tmp;
 	}
 	my ($data, $c);
 
@@ -699,13 +746,25 @@ sub tv2 {
 			if (defined($data) && $opt_v>0) {
 				print Dumper($data);
 			}
-			diestat("tv2('get',$query):\n$@");
+			diestat("tv2($type,$query):\n$@");
 		}
 		if (defined($ratename)) {
 			save_rates($ratename, $c);
 		}
 		return ($data, $c);
 	}
+	if ($type eq "post") {
+		eval {
+			($data, $c) = $client2->post($query, 
+				$pdata
+			);
+		};
+		if ($@) {
+			diestat("tv2($type,$query):\n$@");
+		}
+		return ($data, $c);
+	}
+			
 	diestat("tv2('${type}', $query): unhandled type");
 }
 sub tv1 {
