@@ -35,7 +35,8 @@ my $facility = 'user';
 
 our $opt_b; # shows bookmarks
 our $opt_c; # config file
-our $opt_j; # arbitrary query to get json output
+our $opt_j; # arbitrary v2 query to get json output
+our $opt_J; # arbitrary v1 query to get json output
 our $opt_l; # chase likes
 our $opt_q; # quiet
 our $opt_r; # desired resutls count
@@ -58,7 +59,7 @@ $opt_r = 10;
 $opt_s = 0;
 $opt_v = 0;
 
-getopts('bc:d:j:lqr:svw:ST:LN');
+getopts('bc:d:j:lqr:svw:J:ST:LN');
 
 if (!defined($opt_c)) {
 	die "Config file '${opt_c}' EEXIST";
@@ -111,6 +112,12 @@ if ($opt_s>0) {
 
 if (defined($opt_j)) {
 	my ($data, $c) = tv2("get", $opt_j, $opt_j );
+	print Dumper($data);
+	show_stats();
+	exit(0);
+}
+if (defined($opt_J)) {
+	my ($data, $c) = tv2("get", $opt_J, $opt_J );
 	print Dumper($data);
 	show_stats();
 	exit(0);
@@ -171,7 +178,9 @@ if (defined($opt_d)) {
 	my $uid = $opt_d;
 	my $msg = $ARGV[0];
 	my $payload = {
-		text => $msg,
+		-to_json => {
+			text => $msg,
+		},
 	};
 	my @res = tv2("post", "dm_conversations/with/${uid}/messages", $payload);
 	print Dumper(@res);
@@ -570,7 +579,7 @@ sub show_ustats {
 }
 
 sub show_mystats {
-	my ($me, $c) = $client1->verify_credentials;
+	my ($me, $c) = tv1("get","account/verify_credentials");
 	if ($opt_v>0) {
 		print "query=account/verify_credentials\n";
 	}
