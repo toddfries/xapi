@@ -34,6 +34,7 @@ my $logopt = 'pid';
 my $facility = 'user';
 
 our $opt_b; # shows bookmarks
+our $opt_B; # '-B postid' bookmark postid
 our $opt_c; # config file
 our $opt_j; # arbitrary v2 query to get json output
 our $opt_J; # arbitrary v1 query to get json output
@@ -59,7 +60,7 @@ $opt_r = 10;
 $opt_s = 0;
 $opt_v = 0;
 
-getopts('bc:d:j:lqr:svw:J:ST:LN');
+getopts('bc:d:j:lqr:svw:B:J:ST:LN');
 
 if (!defined($opt_c)) {
 	die "Config file '${opt_c}' EEXIST";
@@ -171,6 +172,22 @@ if (defined($opt_w)) {
 		},
 	};
 	my @res = tv2("post", "tweets", $payload);
+	print Dumper(@res);
+	exit(0);
+}
+
+if (defined($opt_B)) {
+	my $postid = $opt_B;
+	my $payload = {
+		-to_json => {
+			tweet_id => $postid,
+		},
+	};
+	my ($data, $c) = tv2("get", "users/me", "users/me" );
+	#print "users/me: ", Dumper($data), "\n\n";
+
+	my $uid = $data->{data}->{id};
+	my @res = tv2("post", "users/$uid/bookmarks", $payload);
 	print Dumper(@res);
 	exit(0);
 }
