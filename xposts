@@ -191,7 +191,10 @@ if (defined($opt_w)) {
 			text => $msg,
 	};
 	if (defined($opt_W)) {
-		$req->{"in_reply_to_tweet_id"} = $opt_W;
+		my $reply = {
+			"in_reply_to_tweet_id" => $opt_W,
+		};
+		$req->{"reply"} = $reply;
 	}
 	if (defined($opt_R)) {
 		$req->{"reply_settings"} = $opt_R;
