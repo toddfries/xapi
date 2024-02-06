@@ -33,3 +33,21 @@ $ xposts unix2mars
             3 2022-07-13T20:31:41.000Z @unix2mars This is a test. Please ignore. (1547317865640038402)
 ...
 ```
+
+With the new tiers of api access, free only does:
+
+  account/verify_credentials
+  users/me
+  tweets
+
+Let me know if I missed any!
+
+With 'xposts' this currently looks like:
+
+ # must be the user granting the key
+  xposts -s username
+  xposts -j users/me
+  xposts -w "hi there cli tweet"
+   .. displays:
+   https://x.com/username/status/12345
+  xposts -w "replying to my cli tweet" -W 12345
