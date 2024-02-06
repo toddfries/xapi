@@ -121,7 +121,7 @@ if (defined($opt_j)) {
 	exit(0);
 }
 if (defined($opt_J)) {
-	my ($data, $c) = tv2("get", $opt_J, $opt_J );
+	my ($data, $c) = tv1("get", $opt_J, $opt_J );
 	print Dumper($data);
 	show_stats();
 	exit(0);
@@ -824,6 +824,9 @@ sub tv2 {
 		if (defined($ratename)) {
 			save_rates($ratename, $c);
 		}
+		if ($opt_v>0) {
+			print "data: ".Dumper($data);
+		}
 		return ($data, $c);
 	}
 	if ($type eq "post") {
@@ -834,6 +837,9 @@ sub tv2 {
 		};
 		if ($@) {
 			diestat("tv2($type,$query):\n$@");
+		}
+		if ($opt_v>0) {
+			print "data: ".Dumper($data);
 		}
 		return ($data, $c);
 	}
@@ -853,6 +859,9 @@ sub tv1 {
 		};
 		if ($@) {
 			diestat("tv1('get',$query): $@");
+		}
+		if ($opt_v>0) {
+			print "data: ".Dumper($data);
 		}
 		return ($data, $c);
 	}
