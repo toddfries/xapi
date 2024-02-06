@@ -48,6 +48,7 @@ our $opt_L; # show owned lists
 our $opt_N; # no syslog
 
 our $opt_w; # write a post, $opt_w is message
+our $opt_R; #  post reply_settings { "mentionedUsers", "followers", "everyone", "" }
 our $opt_W; #  post reply id
 our $opt_d; # write a dm message $opt_d is uid, $ARGV[0] is message
 our $opt_B; # '-B postid' bookmark postid
@@ -181,18 +182,38 @@ if (defined($opt_u)) {
 		diestat("c1(upload_media $file):\n$@");
 	}
 	print "media_id=${media_id}\n";
+	show_stats();
 	exit(0);
 }
 if (defined($opt_w)) {
 	my $msg = $opt_w;
-	my $payload = {
-		-to_json => {
+	my $req = {
 			text => $msg,
-			reply_settings => "mentionedUsers",
-		},
 	};
-	my @res = tv2("post", "tweets", $payload);
-	print Dumper(@res);
+	if (defined($opt_W)) {
+		$req->{"in_reply_to_tweet_id"} = $opt_W;
+	}
+	if (defined($opt_R)) {
+		$req->{"reply_settings"} = $opt_R;
+	}
+	# $req->{for_super_followers_only} = "true";
+	# $req->{reply_settings} = "mentionedUsers";
+	# $req->{media} = $filebase64; ?
+	# $req->{geo} = $geoobj; ?
+	# $req->{geo}->{place_id} = $geo_place_id;
+
+	my $payload = { };
+	$payload->{"-to_json"} = $req;
+
+	my ($data, $c) = tv2("get", "users/me", "users/me" );
+	my $uid = $data->{data}->{id};
+	my $uname = $data->{data}->{username};
+
+	($data, $c) = tv2("post", "tweets", $payload, "tweets");
+	my $postid = $data->{data}->{id};
+	my $txt = $data->{data}->{text};
+	print "https://x.com/${uname}/status/${postid} \"${txt}\"\n";
+	show_stats();
 	exit(0);
 }
 
@@ -203,14 +224,6 @@ if (defined($opt_B)) {
 			tweet_id => $postid,
 		},
 	};
-	if (defined($opt_W)) {
-		$payload->{"-to_json"}->{in_reply_to_tweet_id} = $opt_W;
-	}
-	# $payload->{"-to_json"}->{for_super_followers_only} = "true";
-	# $payload->{"-to_json"}->{reply_settings} = "mentionedUsers";
-	# $payload->{"-to_json"}->{media} = $filebase64; ?
-	# $payload->{"-to_json"}->{geo} = $geoobj; ?
-	# $payload->{"-to_json"}->{geo}->{place_id} = $geo_place_id;
 
 	my ($data, $c) = tv2("get", "users/me", "users/me" );
 	#print "users/me: ", Dumper($data), "\n\n";
@@ -218,6 +231,7 @@ if (defined($opt_B)) {
 	my $uid = $data->{data}->{id};
 	my @res = tv2("post", "users/$uid/bookmarks", $payload);
 	print Dumper(@res);
+	show_stats();
 	exit(0);
 }
 if (defined($opt_d)) {
@@ -230,6 +244,7 @@ if (defined($opt_d)) {
 	};
 	my @res = tv2("post", "dm_conversations/with/${uid}/messages", $payload);
 	print Dumper(@res);
+	show_stats();
 	exit(0);
 }
 	
