@@ -56,6 +56,8 @@ our $opt_d; # write a dm message $opt_d is uid, $ARGV[0] is message
 our $opt_B; # '-B postid' bookmark postid
 our $opt_u; # upload a media file and get an id
 
+our $opt_a; # generic action with argument
+
 # defaults
 $opt_b = 0;
 $opt_c = $ENV{HOME}."/.config/xapi/xapi.conf";
@@ -65,7 +67,7 @@ $opt_r = 10;
 $opt_s = 0;
 $opt_v = 0;
 
-getopts('bc:d:j:lqr:su:vw:B:I:J:ST:LNW:');
+getopts('a:bc:d:j:lqr:su:vw:B:I:J:ST:LNW:');
 
 if (!defined($opt_c)) {
 	die "Config file '${opt_c}' EEXIST";
@@ -175,19 +177,18 @@ if (defined($opt_u)) {
 	if (! -f $file ) {
 		die "file $file EEXISTS";
 	}
-	my $media_id;
-	eval {
-		$media_id = $client1->upload_media(
-			media => [ $file ],
-			type => 'image/jpeg',
-		);
-	};
-	if ($@) {
-		diestat("c1(upload_media $file):\n$@");
-	}
-	print "media_id=${media_id}\n";
+	my $mdata = file_to_mediaid( $file );
+	
+	printf "media_id=%s name=%s\n", $mdata->{media_id}, $file;
 	show_stats();
 	exit(0);
+}
+if (defined($opt_a)) {
+	if ($opt_a eq "like") {
+		like(@ARGV);
+		exit(0);
+	}
+	die "unknown action ${opt_a}";
 }
 if (defined($opt_w)) {
 	my $msg = $opt_w;
@@ -204,10 +205,23 @@ if (defined($opt_w)) {
 		$req->{"reply_settings"} = $opt_R;
 	}
 	if (defined($opt_I)) {
-		my $mdata = file_to_mediaid( $opt_I );
-		my $mstr = sprintf("%s", $mdata->{media_id});
+		my @ids;
+		my ($mdata, $mstr, $mid);
+		foreach my $f (split(/,/, $opt_I)) {
+			if ($f =~ /^[0-9]+$/) {
+				$mid = $f;
+			} else {
+				$mdata = file_to_mediaid( $f );
+				$mid = $mdata->{media_id};
+			}
+			$mstr = sprintf("%s", $mid);
+			if ($opt_v>0) {
+				printf " media_id %s from %s\n", $mstr, $f;
+			}
+			push @ids, $mstr;
+		}
 		my $media = {
-			media_ids => [ $mstr ],
+			media_ids => [ @ids ],
 		};
 		$req->{media} = $media;
 	}
@@ -222,6 +236,10 @@ if (defined($opt_w)) {
 	my ($data, $c) = tv2("get", "users/me", "users/me" );
 	my $uid = $data->{data}->{id};
 	my $uname = $data->{data}->{username};
+
+	if ($opt_v>0) {
+		print "tweets payload = ".Dumper($payload);
+	}
 
 	($data, $c) = tv2("post", "tweets", $payload, "tweets");
 	my $postid = $data->{data}->{id};
@@ -919,4 +937,20 @@ sub file_to_mediaid {
 	}
 	return $data;
 	exit(0);
+}
+sub like {
+	my (@args) = @_;
+	if (!defined($args[0])) {
+		die "called like with no post to like";
+	}
+	my $payload = { };
+	$payload->{"-to_json"}->{tweet_id} = $args[0],
+	if ($opt_v>0) {
+		print "like payload = { ".Dumper($payload)." }\n";
+	}
+	my ($data, $c) = tv2("get", "users/me", "users/me" );
+	my $uid = $data->{data}->{id};
+	my $uname = $data->{data}->{username};
+	($data, $c) = tv2("post", "users/${uid}/likes", $payload, "likes");
+	print Dumper($data);
 }
