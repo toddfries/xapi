@@ -28,6 +28,7 @@ use ReadConf;
 use Sys::Syslog;
 use Twitter::API;
 use JSON;
+use MIME::Base64;
 
 my $ident = "Xposts";
 my $logopt = 'pid';
@@ -50,6 +51,7 @@ our $opt_N; # no syslog
 our $opt_w; # write a post, $opt_w is message
 our $opt_R; #  post reply_settings { "mentionedUsers", "followers", "everyone", "" }
 our $opt_W; #  post reply id
+our $opt_I; #  post image filename
 our $opt_d; # write a dm message $opt_d is uid, $ARGV[0] is message
 our $opt_B; # '-B postid' bookmark postid
 our $opt_u; # upload a media file and get an id
@@ -63,7 +65,7 @@ $opt_r = 10;
 $opt_s = 0;
 $opt_v = 0;
 
-getopts('bc:d:j:lqr:su:vw:B:J:ST:LNW:');
+getopts('bc:d:j:lqr:su:vw:B:I:J:ST:LNW:');
 
 if (!defined($opt_c)) {
 	die "Config file '${opt_c}' EEXIST";
@@ -88,6 +90,7 @@ our $client1 = Twitter::API->new_with_traits(
 	access_token	=> $c->{access_token},
 	access_token_secret => $c->{access_token_secret},
 );
+#print Dumper($client1);
 our $client2 = Twitter::API->new_with_traits(
 	api_version => '2',
 	api_ext	=> '',
@@ -98,6 +101,7 @@ our $client2 = Twitter::API->new_with_traits(
 	access_token	=> $c->{access_token},
 	access_token_secret => $c->{access_token_secret},
 );
+#print Dumper($client2);
 
 our $umemcache = { }; # users
 our $pmemcache = { }; # posts
@@ -199,9 +203,16 @@ if (defined($opt_w)) {
 	if (defined($opt_R)) {
 		$req->{"reply_settings"} = $opt_R;
 	}
+	if (defined($opt_I)) {
+		my $mdata = file_to_mediaid( $opt_I );
+		my $mstr = sprintf("%s", $mdata->{media_id});
+		my $media = {
+			media_ids => [ $mstr ],
+		};
+		$req->{media} = $media;
+	}
 	# $req->{for_super_followers_only} = "true";
 	# $req->{reply_settings} = "mentionedUsers";
-	# $req->{media} = $filebase64; ?
 	# $req->{geo} = $geoobj; ?
 	# $req->{geo}->{place_id} = $geo_place_id;
 
@@ -879,4 +890,33 @@ sub wait_till {
 	printf STDERR "\nwait_till waiting %ds", $res - $now;
 	sleep($res - $now); # should we +1 to not be too fast?
 	printf STDERR " done.\n";
+}
+
+sub file_to_mediaid {
+	my ($file) = @_;
+
+	my $IMG;
+	open ($IMG, '<:raw', $file) or die "Can't open file $IMG";
+	my $image_data;
+	read($IMG, $image_data, -s $IMG);
+	close($IMG);
+	my $encoded_image = encode_base64($image_data);
+	my $media_params = {
+		media_type => 'image/jpeg',
+		media_data => $encoded_image,
+	};
+	my $media = { media => $media_params };
+	my $payload = {
+		media_data => $encoded_image,
+		media_type => 'image/jpeg',
+	};
+	my $query = $client1->upload_url_for('media/upload');
+	eval {
+		($data, $c) = $client1->request(post => $query, $payload);
+	};
+	if ($@) {
+		diestat("tv1($query):\n$@");
+	}
+	return $data;
+	exit(0);
 }
