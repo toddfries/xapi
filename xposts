@@ -944,7 +944,7 @@ sub like {
 		die "called like with no post to like";
 	}
 	my $payload = { };
-	$payload->{"-to_json"}->{tweet_id} = $args[0],
+	$payload->{"-to_json"}->{tweet_id} = $args[0];
 	if ($opt_v>0) {
 		print "like payload = { ".Dumper($payload)." }\n";
 	}
