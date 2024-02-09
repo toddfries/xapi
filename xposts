@@ -219,6 +219,8 @@ if (defined($opt_w)) {
 				printf " media_id %s from %s\n", $mstr, $f;
 			}
 			push @ids, $mstr;
+			# XXX make conditional
+			set_alt_text( $mid, "Hello, alt text World!" );
 		}
 		my $media = {
 			media_ids => [ @ids ],
@@ -876,7 +878,7 @@ sub tv2 {
 	diestat("tv2('${type}', $query): unhandled type");
 }
 sub tv1 {
-	my ($type, $query) = @_;
+	my ($type, $query, $params) = @_;
 	if ($opt_v>0) {
 		print "query=${query}\n";
 	}
@@ -887,7 +889,31 @@ sub tv1 {
 			($data, $c) = $client1->get($query);
 		};
 		if ($@) {
-			diestat("tv1('get',$query): $@");
+			if (defined($data)) {
+				print "tv1 data: ".Dumper($data);
+			}
+			if (defined($c)) {
+				print "tv1 c: ".Dumper($c);
+			}
+			diestat("tv1($type,$query): $@");
+		}
+		if ($opt_v>0) {
+			print "data: ".Dumper($data);
+		}
+		return ($data, $c);
+	}
+	if ($type eq "post") {
+		eval {
+			($data, $c) = $client1->post($query, $params);
+		};
+		if ($@) {
+			if (defined($data)) {
+				print "tv1 data: ".Dumper($data);
+			}
+			if (defined($c)) {
+				print "tv1 c: ".Dumper($c);
+			}
+			diestat("tv1($type,$query): $@");
 		}
 		if ($opt_v>0) {
 			print "data: ".Dumper($data);
@@ -953,4 +979,20 @@ sub like {
 	my $uname = $data->{data}->{username};
 	($data, $c) = tv2("post", "users/${uid}/likes", $payload, "likes");
 	print Dumper($data);
+}
+sub set_alt_text {
+	my ($mid, $text) = @_;
+
+	my $params = {
+		media_id => "${mid}",
+		alt_text => {
+			text => "${text}",
+		},
+	};
+	my $payload->{"-to_json"} = $params;
+	($data, $c) = tv1("post", "media/metadata/create", $payload,
+		"media/metadata/create");
+	if ($opt_v>1) {
+		print "media/metadata/create result:\n".Dumper($data);
+	}
 }
