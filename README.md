@@ -39,6 +39,7 @@ With the new tiers of api access, free only does:
   account/verify_credentials
   users/me
   tweets
+  media/metadata/create
   uploads.twitter.com/1.1/media/upload
 
 Let me know if I missed any!
