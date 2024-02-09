@@ -188,6 +188,10 @@ if (defined($opt_a)) {
 		like(@ARGV);
 		exit(0);
 	}
+	if ($opt_a eq "desc") {
+		desc(@ARGV);
+		exit(0);
+	}
 	die "unknown action ${opt_a}";
 }
 if (defined($opt_w)) {
@@ -204,10 +208,15 @@ if (defined($opt_w)) {
 	if (defined($opt_R)) {
 		$req->{"reply_settings"} = $opt_R;
 	}
+	# $opt_I syntax:
+	# <img> = foo.jpg[="alternate text"]
+	# list = <img>[,<img>...]
+	# 
 	if (defined($opt_I)) {
 		my @ids;
 		my ($mdata, $mstr, $mid);
-		foreach my $f (split(/,/, $opt_I)) {
+		foreach my $img (split(/,/, $opt_I)) {
+			my ($f,$txt)=split(/=/,$img);
 			if ($f =~ /^[0-9]+$/) {
 				$mid = $f;
 			} else {
@@ -220,7 +229,9 @@ if (defined($opt_w)) {
 			}
 			push @ids, $mstr;
 			# XXX make conditional
-			set_alt_text( $mid, "Hello, alt text World!" );
+			if (defined($txt)) {
+				set_alt_text( $mid, $txt );
+			}
 		}
 		my $media = {
 			media_ids => [ @ids ],
@@ -980,8 +991,22 @@ sub like {
 	($data, $c) = tv2("post", "users/${uid}/likes", $payload, "likes");
 	print Dumper($data);
 }
+sub desc {
+	my (@args) = @_;
+	if (!defined($args[0])) {
+		die "called desc with no args";
+	}
+	my ($mid, $text) = @args;
+	set_alt_text($mid, $text);
+}
 sub set_alt_text {
 	my ($mid, $text) = @_;
+
+	if (length($text) > 1000) {
+		printf "Alt text for media_id %d is %d bytes:\n", $mid, length($text);
+		printf "   '%s'\n", $text;
+		return;
+	}
 
 	my $params = {
 		media_id => "${mid}",
