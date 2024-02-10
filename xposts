@@ -82,6 +82,8 @@ if (!defined($c)) {
 	die "[creds] not found in xapi.conf";
 }
 
+our $me_glob;
+
 our $client1 = Twitter::API->new_with_traits(
 	#api_version => '1',
 	#api_ext	=> '',
@@ -192,6 +194,16 @@ if (defined($opt_a)) {
 		desc(@ARGV);
 		exit(0);
 	}
+	if ($opt_a eq "post") {
+		post(@ARGV);
+		exit(0);
+	}
+	if ($opt_a eq "uinfo") {
+		my $data = uinfo();
+		print Dumper($data);
+		show_stats();
+		exit(0);
+	}
 	die "unknown action ${opt_a}";
 }
 if (defined($opt_w)) {
@@ -224,7 +236,7 @@ if (defined($opt_w)) {
 				$mid = $mdata->{media_id};
 			}
 			$mstr = sprintf("%s", $mid);
-			if ($opt_v>0) {
+			if ($v>0) {
 				printf " media_id %s from %s\n", $mstr, $f;
 			}
 			push @ids, $mstr;
@@ -246,15 +258,13 @@ if (defined($opt_w)) {
 	my $payload = { };
 	$payload->{"-to_json"} = $req;
 
-	my ($data, $c) = tv2("get", "users/me", "users/me" );
-	my $uid = $data->{data}->{id};
-	my $uname = $data->{data}->{username};
+	my $uname = uinfo()->{username};
 
-	if ($opt_v>0) {
+	if ($v>0) {
 		print "tweets payload = ".Dumper($payload);
 	}
 
-	($data, $c) = tv2("post", "tweets", $payload, "tweets");
+	my ($data, $c) = tv2("post", "tweets", $payload, "tweets");
 	my $postid = $data->{data}->{id};
 	my $txt = $data->{data}->{text};
 	print "https://x.com/${uname}/status/${postid} \"${txt}\"\n";
@@ -270,10 +280,7 @@ if (defined($opt_B)) {
 		},
 	};
 
-	my ($data, $c) = tv2("get", "users/me", "users/me" );
-	#print "users/me: ", Dumper($data), "\n\n";
-
-	my $uid = $data->{data}->{id};
+	my $uid = uinfo()->{id};
 	my @res = tv2("post", "users/$uid/bookmarks", $payload);
 	print Dumper(@res);
 	show_stats();
@@ -358,10 +365,40 @@ if (! defined($opt_q)) {
 show_stats();
 1;
 
+sub umcache_ck {
+	my ($var) = @_;
+
+	return $umemcache->{$var};
+}
+sub umcache_add {
+	my ($data) = @_;
+
+	my $id = $data->{id};
+	my $who = $data->{username};
+	#print "ucache miss ".$data->{id}."\n";
+
+	#print "user: ".Dumper($user);
+
+	# double mem use but easier lookup
+
+	$umemcache->{$id} = $data;
+	$umemcache->{$who} = $data;
+}
+sub uinfo {
+	my $me = get_creds();
+	my $uc = umcache_ck($me->{screen_name});
+	if (defined($uc)) {
+		return $uc;
+	}
+	my ($data, $c) = tv2("get", "users/me", "users/me" );
+	umcache_add($data->{data});
+	return $data;
+}
+
 sub getuser_byname {
 	my ($who) = @_;
 
-	my $data = $umemcache->{$who};
+	my $data = umcache_ck($who);
 	if (defined($data)) {
 		#print "ucache hit  ".$data->{id}."\n";
 		return $data;
@@ -380,25 +417,17 @@ sub getuser_byname {
 		print "ENOID: ";
 		diestat(Dumper($data));
 	}
-	if ($opt_v>0) {
+	if ($v>0) {
 		print Dumper($data);
 	}
-	my $id = $data->{id};
-	#print "ucache miss ".$data->{id}."\n";
-
-	#print "user: ".Dumper($user);
-
-	# double mem use but easier lookup
-
-	$umemcache->{$id} = $data;
-	$umemcache->{$who} = $data;
+	umcache_add($data);
 
 	return $data;
 }
 sub getuser_byid {
 	my ($id) = @_;
 
-	my $data = $umemcache->{$id};
+	my $data = umcache_ck($id);
 	if (defined($data)) {
 		#print "ucache hit  ".$data->{id}."\n";
 		return $data;
@@ -406,13 +435,8 @@ sub getuser_byid {
 	my $c;
 	($data, $c) = tv2("get","users/${id}","users/:id");
 	$data = $data->{data};
-	my $who = $data->{username};
-	#print "ucache miss ".$data->{id}."\n";
 
-	# double mem use but easier lookup
-
-	$umemcache->{$id} = $data;
-	$umemcache->{$who} = $data;
+	umcache_add($data);
 
 	return $data;
 }
@@ -441,18 +465,10 @@ sub expand_tweet {
 	}
 
 	foreach my $user ( @{ $tweets->{includes}->{users} } ) {
-		my $id = $user->{id};
-		if (!defined($id)) {
-			print "\n\nuser without id? ".Dumper($user)."\n\n";
+		if (defined(umcache_ck($user->{id}))) {
 			next;
 		}
-		my $who = $user->{username};
-		if (defined($umemcache->{$id})) {
-			next;
-		}
-
-		$umemcache->{$id} = $user;
-		$umemcache->{$who} = $user;
+		umcache_add($user);
 	}
 	foreach my $tweet ( @{ $tweets->{includes}->{tweets} } ) {
 		#diestat(" tweet: ". Dumper($tweet));
@@ -684,13 +700,21 @@ sub show_ustats {
 	
 }
 
-sub show_mystats {
+sub get_creds {
+	if (defined($me_glob)) {
+		return $me_glob;
+	}
 	my ($me, $c) = tv1("get","account/verify_credentials");
-	if ($opt_v>0) {
+	if ($v>0) {
 		print "query=account/verify_credentials\n";
 	}
-	save_rates("account/verify_credentials", $c);
-	if (defined($me) && $opt_v > 0) {
+	return $me;
+}
+
+
+sub show_mystats {
+	my $me = get_creds();
+	if (defined($me) && $v > 0) {
 		print Dumper($me);
 	}
 	my $favs = $me->{favourites_count};
@@ -760,11 +784,8 @@ sub show_owned_lists {
 sub show_bookmarks {
 
 	my ($data, $c);
-	# unlimited calls!
-	($data, $c) = tv2("get", "users/me", "users/me" );
-	print "users/me: ", Dumper($data), "\n\n";
 
-	my $id = $data->{data}->{id};
+	my $id = uinfo()->{id};
 	my $maxres=100;
 	($data, $c) = tv2("get", "users/${id}/bookmarks", "users/:id/bookmarks");
 		# "?max_results=${maxres}&id=${id}");
@@ -786,6 +807,11 @@ sub save_rates {
 			$c->rate_limit_remaining,
 			$c->rate_limit_reset,
 	);
+	my ($ul, $ulrem, $ulres) = (
+			$c->user_limit,
+			$c->user_limit_remaining,
+			$c->user_limit_reset,
+	);
 	if (!defined($rl) || !defined($rlrem) || !defined($rlres)) {
 		return;
 	}
@@ -798,6 +824,14 @@ sub save_rates {
 	}
 	$smemcache->{$name}->{last}->{rlrem} = $rlrem;
 	$smemcache->{$name}->{last}->{rlres} = $rlres;
+	$nextreset->parse( "epoch $ulres" );
+	if (!defined($smemcache->{$name}->{start}->{ulrem})) {
+		$smemcache->{$name}->{start}->{ulrem} = $ulrem-1;
+		$smemcache->{$name}->{start}->{ulres} = $ulres;
+		$smemcache->{$name}->{ul} = $rl;
+	}
+	$smemcache->{$name}->{last}->{ulrem} = $ulrem;
+	$smemcache->{$name}->{last}->{ulres} = $ulres;
 	return;
 }
 sub diestat {
@@ -821,7 +855,19 @@ sub show_stats {
 		if (!defined($rl) || !defined($start_res) || !defined($start_rem)) {
 			return;
 		}
-		printf STDERR "%50s %d to %d/%d from %s to %s\n",
+		printf STDERR "%50s %d to %d/%d from %s to %s (rate)\n",
+			$name, $last_rem, $start_rem, $rl,
+			scalar localtime $start_res,
+			scalar localtime $last_res;
+		$start_res = $smemcache->{$name}->{start}->{ulres};
+		$start_rem = $smemcache->{$name}->{start}->{ulrem};
+		$last_res = $smemcache->{$name}->{last}->{ulres};
+		$last_rem = $smemcache->{$name}->{last}->{ulrem};
+		$rl = $smemcache->{$name}->{ul};
+		if (!defined($rl) || !defined($start_res) || !defined($start_rem)) {
+			next;
+		}
+		printf STDERR "%50s %d to %d/%d from %s to %s (user)\n",
 			$name, $last_rem, $start_rem, $rl,
 			scalar localtime $start_res,
 			scalar localtime $last_res;
@@ -831,7 +877,7 @@ sub show_stats {
 sub tv2 {
 	my ($type, $query, $ratename, $tmp) = @_;
 	my $pdata;
-	if ($opt_v>0) {
+	if ($v>0) {
 		print "query=${query}\n";
 	}
 	if ($type eq "post") {
@@ -853,21 +899,22 @@ sub tv2 {
 		eval {
 			($data, $c) = $client2->get($query);
 		};
+		if ($v>0) {
+			print "data: ".Dumper($data);
+			print "c: ".Dumper($c);
+		}
 		if ($@) {
 			if (defined($c) && $c->rate_limit_remaining < 1) {
 				wait_till($c->rate_limit_reset);
 				goto retry;
 			}
-			if (defined($data) && $opt_v>0) {
+			if (defined($data) && $v>0) {
 				print Dumper($data);
 			}
 			diestat("tv2($type,$query):\n$@");
 		}
 		if (defined($ratename)) {
 			save_rates($ratename, $c);
-		}
-		if ($opt_v>0) {
-			print "data: ".Dumper($data);
 		}
 		return ($data, $c);
 	}
@@ -877,11 +924,15 @@ sub tv2 {
 				$pdata
 			);
 		};
+		if ($v>0) {
+			print "data: ".Dumper($data);
+			print "c: ".Dumper($c);
+		}
 		if ($@) {
 			diestat("tv2($type,$query):\n$@");
 		}
-		if ($opt_v>0) {
-			print "data: ".Dumper($data);
+		if (defined($ratename)) {
+			save_rates($ratename, $c);
 		}
 		return ($data, $c);
 	}
@@ -890,15 +941,21 @@ sub tv2 {
 }
 sub tv1 {
 	my ($type, $query, $params) = @_;
-	if ($opt_v>0) {
+	if ($v>0) {
 		print "query=${query}\n";
 	}
 	my ($data, $c);
+	my $ratename = $query;
+	$ratename=~ s/\?.*$//g;
 
 	if ($type eq "get") {
 		eval {
 			($data, $c) = $client1->get($query);
 		};
+		if ($v>0) {
+			print "data: ".Dumper($data);
+			print "c: ".Dumper($c);
+		}
 		if ($@) {
 			if (defined($data)) {
 				print "tv1 data: ".Dumper($data);
@@ -908,8 +965,8 @@ sub tv1 {
 			}
 			diestat("tv1($type,$query): $@");
 		}
-		if ($opt_v>0) {
-			print "data: ".Dumper($data);
+		if (defined($ratename)) {
+			save_rates($ratename, $c);
 		}
 		return ($data, $c);
 	}
@@ -917,6 +974,12 @@ sub tv1 {
 		eval {
 			($data, $c) = $client1->post($query, $params);
 		};
+		if ($v>0) {
+			print "data: ".Dumper($data);
+			if ($v>1) {
+				print "c: ".Dumper($c);
+			}
+		}
 		if ($@) {
 			if (defined($data)) {
 				print "tv1 data: ".Dumper($data);
@@ -926,8 +989,8 @@ sub tv1 {
 			}
 			diestat("tv1($type,$query): $@");
 		}
-		if ($opt_v>0) {
-			print "data: ".Dumper($data);
+		if (defined($ratename)) {
+			save_rates($ratename, $c);
 		}
 		return ($data, $c);
 	}
@@ -982,12 +1045,10 @@ sub like {
 	}
 	my $payload = { };
 	$payload->{"-to_json"}->{tweet_id} = $args[0];
-	if ($opt_v>0) {
+	if ($v>0) {
 		print "like payload = { ".Dumper($payload)." }\n";
 	}
-	my ($data, $c) = tv2("get", "users/me", "users/me" );
-	my $uid = $data->{data}->{id};
-	my $uname = $data->{data}->{username};
+	my $uid = uinfo()->{id};
 	($data, $c) = tv2("post", "users/${uid}/likes", $payload, "likes");
 	print Dumper($data);
 }
@@ -1017,7 +1078,72 @@ sub set_alt_text {
 	my $payload->{"-to_json"} = $params;
 	($data, $c) = tv1("post", "media/metadata/create", $payload,
 		"media/metadata/create");
-	if ($opt_v>1) {
+	if ($v>1) {
 		print "media/metadata/create result:\n".Dumper($data);
 	}
+}
+sub post {
+	my ($msg) = @_;
+	my $req = {
+			tweet_text => $msg,
+	};
+	if (defined($opt_W)) {
+		my $reply = {
+			"in_reply_to_tweet_id" => $opt_W,
+		};
+		$req->{"reply"} = $reply;
+	}
+	if (defined($opt_R)) {
+		$req->{"reply_settings"} = $opt_R;
+	}
+	# $opt_I syntax:
+	# <img> = foo.jpg[="alternate text"]
+	# list = <img>[,<img>...]
+	# 
+	if (defined($opt_I)) {
+		my @ids;
+		my ($mdata, $mstr, $mid);
+		foreach my $img (split(/,/, $opt_I)) {
+			my ($f,$txt)=split(/=/,$img);
+			if ($f =~ /^[0-9]+$/) {
+				$mid = $f;
+			} else {
+				$mdata = file_to_mediaid( $f );
+				$mid = $mdata->{media_id};
+			}
+			$mstr = sprintf("%s", $mid);
+			if ($v>0) {
+				printf " media_id %s from %s\n", $mstr, $f;
+			}
+			push @ids, $mstr;
+			# XXX make conditional
+			if (defined($txt)) {
+				set_alt_text( $mid, $txt );
+			}
+		}
+		my $media = {
+			media_ids => [ @ids ],
+		};
+		$req->{media} = $media;
+	}
+	# $req->{for_super_followers_only} = "true";
+	# $req->{reply_settings} = "mentionedUsers";
+	# $req->{geo} = $geoobj; ?
+	# $req->{geo}->{place_id} = $geo_place_id;
+
+	my $payload = { };
+	$payload->{"-to_json"} = $req;
+
+	my $uname = uinfo()->{username};
+
+	if ($v>0) {
+		print "tweets payload = ".Dumper($payload);
+	}
+
+	($data, $c) = tv2("post", "tweets", $payload, "tweets");
+	my $postid = $data->{data}->{id};
+	my $txt = $data->{data}->{text};
+	print "https://x.com/${uname}/status/${postid} \"${txt}\"\n";
+	show_stats();
+	exit(0);
 }
