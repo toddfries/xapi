@@ -37,6 +37,7 @@ $ xposts unix2mars
 With the new tiers of api access, free only does:
 
   account/verify_credentials
+  account/settings
   users/me
   tweets
   media/metadata/create
@@ -53,3 +54,5 @@ With 'xposts' this currently looks like:
    .. displays:
    https://x.com/username/status/12345
   xposts -w "replying to my cli tweet" -W 12345
+  xposts -w "reply post with two images" -W 12345 -I foo.jpg,fun.jpg
+  xposts -w "reply post with four images with descriptions" -W 12345 -I 1.jpg="one",2.jpg="two",3.jpg="three",4.jpg="Four"
