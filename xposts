@@ -828,7 +828,7 @@ sub save_rates {
 	if (!defined($smemcache->{$name}->{start}->{ulrem})) {
 		$smemcache->{$name}->{start}->{ulrem} = $ulrem-1;
 		$smemcache->{$name}->{start}->{ulres} = $ulres;
-		$smemcache->{$name}->{ul} = $rl;
+		$smemcache->{$name}->{ul} = $ul;
 	}
 	$smemcache->{$name}->{last}->{ulrem} = $ulrem;
 	$smemcache->{$name}->{last}->{ulres} = $ulres;
