@@ -26,7 +26,7 @@ use Getopt::Std;
 use POSIX qw(strftime);
 use ReadConf;
 use Sys::Syslog;
-use Twitter::API;
+use X::API;
 use JSON;
 use MIME::Base64;
 
@@ -84,7 +84,7 @@ if (!defined($c)) {
 
 our $me_glob;
 
-our $client1 = Twitter::API->new_with_traits(
+our $client1 = X::API->new_with_traits(
 	#api_version => '1',
 	#api_ext	=> '',
 	traits => [ qw/ApiMethods/ ],
@@ -95,7 +95,7 @@ our $client1 = Twitter::API->new_with_traits(
 	access_token_secret => $c->{access_token_secret},
 );
 #print Dumper($client1);
-our $client2 = Twitter::API->new_with_traits(
+our $client2 = X::API->new_with_traits(
 	api_version => '2',
 	api_ext	=> '',
 	traits => [ qw/ApiMethods/ ],
@@ -165,7 +165,7 @@ if (defined($opt_T)) {
 		#	}
 		#	catch {
 		#		print $_->http_request->as_string."\n";
-		#		print "twitter error code: ".$_->twitter_error_code."\n";
+		#		print "x error code: ".$_->twitter_error_code."\n";
 		#	};
 		#}
 		print expand_tweet(0, $tweets);
@@ -659,7 +659,7 @@ sub expand_media {
 sub show_ustats {
 	my ($handle) = @_;
 
-	# https://developer.twitter.com/en/docs/twitter-api/users/lookup/api-reference/get-users-by-username-username
+	# https://developer.x.com/en/docs/twitter-api/users/lookup/api-reference/get-users-by-username-username
 	# epansions=pinned_tweet_id
 	# user.fields=public_metrics,username,verified,verified_type,withheld,...
 	my $xtra="?user.fields=public_metrics,username,verified,verified_type,withheld,url,entities,location";
@@ -798,7 +798,7 @@ sub save_rates {
 	if (!defined($c) || length(ref($c)) < 1) {
 		return;
 	}
-	if (! (ref($c) eq "Twitter::API::Context") ) {
+	if (! (ref($c) eq "X::API::Context") ) {
 		printf "c is a %s\n", ref($c);
 		return;
 	}
@@ -814,6 +814,17 @@ sub save_rates {
 	);
 	if (!defined($rl) || !defined($rlrem) || !defined($rlres)) {
 		return;
+	}
+	if (!defined($ul) || !defined($ulrem) || !defined($ulres)) {
+		if (!defined($ul)) {
+			$ul = -1;
+		}
+		if (!defined($ulrem)) {
+			$ulrem = 0;
+		}
+		if (!defined($ulres)) {
+			$ulres = 0;
+		}
 	}
 	my $nextreset = Date::Manip::Date->new();
 	$nextreset->parse( "epoch $rlres" );
