@@ -1031,20 +1031,20 @@ sub wait_till {
 sub file_to_mediaid {
 	my ($file) = @_;
 
-	my $IMG;
-	open ($IMG, '<:raw', $file) or die "Can't open file $IMG";
-	my $image_data;
-	read($IMG, $image_data, -s $IMG);
-	close($IMG);
-	my $encoded_image = encode_base64($image_data);
-	my $media_params = {
-		media_type => 'image/jpeg',
-		media_data => $encoded_image,
-	};
-	my $media = { media => $media_params };
+	my $mfh;
+	open ($mfh, '<:raw', $file) or die "Can't open file $mfh";
+	my $media_data;
+	read($mfh, $media_data, -s $mfh);
+	close($mfh);
+	my $encoded_image = encode_base64($media_data);
+#	my $media_params = {
+#		media_type => 'image/jpeg',
+#		media_data => $encoded_image,
+#	};
+#	my $media = { media => $media_params };
 	my $payload = {
-		media_data => $encoded_image,
 		media_type => 'image/jpeg',
+		media_data => $encoded_image,
 	};
 	my $query = $client1->upload_url_for('media/upload');
 	eval {
@@ -1054,7 +1054,6 @@ sub file_to_mediaid {
 		diestat("tv1($query):\n$@");
 	}
 	return $data;
-	exit(0);
 }
 sub like {
 	my (@args) = @_;
