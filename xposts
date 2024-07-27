@@ -390,7 +390,14 @@ sub uinfo {
 	if (defined($uc)) {
 		return $uc;
 	}
-	my ($data, $c) = tv2("get", "users/me", "users/me" );
+	my ($data, $c) = tv2("get", "users/me?user.fields=connection_status,created_at,description,entities,".
+		"id,location,most_recent_tweet_id,name,pinned_tweet_id,profile_banner_url,profile_image_url,".
+		"protected,public_metrics,receives_your_dm,subscription_type,url,username,verified,".
+		"verified_type,withheld&expansions=most_recent_tweet_id,pinned_tweet_id&".
+		"tweet.fields=attachments,author_id,card_uri,context_annotations,conversation_id,created_at,".
+		"edit_controls,edit_history_tweet_ids,entities,geo,id,in_reply_to_user_id,lang,note_tweet,".
+		"possibly_sensitive,public_metrics,referenced_tweets,reply_settings,scopes,source,text,".
+		"username,withheld", "users/me" );
 	umcache_add($data->{data});
 	return $data;
 }
@@ -1123,9 +1130,9 @@ sub post {
 				$mid = $mdata->{media_id};
 			}
 			$mstr = sprintf("%s", $mid);
-			if ($v>0) {
+			#if ($v>0) {
 				printf " media_id %s from %s\n", $mstr, $f;
-			}
+			#}
 			push @ids, $mstr;
 			# XXX make conditional
 			if (defined($txt)) {
