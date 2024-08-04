@@ -29,10 +29,19 @@ use Sys::Syslog;
 use X::API;
 use JSON;
 use MIME::Base64;
+use Storable;
+use Digest::SHA1 qw(sha1_hex);
 
 my $ident = "Xposts";
 my $logopt = 'pid';
 my $facility = 'user';
+
+our $cachedir = $ENV{'HOME'}."/.cache/xposts";
+mkdir($ENV{'HOME'}.".cache") if ! -d $ENV{'HOME'}."/.cache";
+mkdir($cachedir) if ! -d $cachedir;
+if (! -d $cachedir) {
+	die "Can't create $cachedir";
+}
 
 our $opt_b; # shows bookmarks
 our $opt_c; # config file
@@ -377,7 +386,7 @@ sub umcache_add {
 
 	my $id = $data->{id};
 	my $who = $data->{username};
-	#print "ucache miss ".$data->{id}."\n";
+	print "umcache miss ${who}"."[$id]\n";
 
 	#print "user: ".Dumper($user);
 
@@ -713,11 +722,18 @@ sub get_creds {
 	if (defined($me_glob)) {
 		return $me_glob;
 	}
+	my $data = read_from_cache("get.account.verifiy_credentials");
+	if (defined($data)) {
+		$me_glob = $data;
+		print "read_from_cache(get.account.verify.credentials) success!\n";
+		return $me_glob;
+	}
 	my ($me_glob, $c) = tv1("get","account/verify_credentials");
 	save_rates("account/verify_credentials", $c);
 	if ($v>0) {
 		print "query=account/verify_credentials\n";
 	}
+	write_to_cache("get.account.verify_credentials", $me_glob);
 	return $me_glob;
 }
 
@@ -1167,4 +1183,33 @@ sub post {
 	print "https://x.com/${uname}/status/${postid} \"${txt}\"\n";
 	show_stats();
 	exit(0);
+}
+sub key_to_cache_filename {
+	my ($key) = @_;
+	my $filename = $cachedir."/".sha1_hex($key);
+	return $filename;
+}
+sub write_to_cache {
+	my ($key, $data) = @_;
+	my $filename = key_to_cache_filename($key);
+	if (!defined($data)) {
+		return;
+	}
+
+	open my $fh, '>', $filename or die "Could not open file '$filename': $!";
+	print $fh Storable::nfreeze($data);
+	close $fh;
+}
+sub read_from_cache {
+	my ($key) = @_;
+	my $filename = key_to_cache_filename($key);
+	my $fh;
+	if (!open($fh, '<', $filename)) {
+		warn "Could not open file '$filename': $!";
+		return undef;
+	}
+	local $/ = undef;  # Read the entire file at once
+	my $data = Storable::thaw(<$fh>);
+	close $fh;
+	return $data;
 }
