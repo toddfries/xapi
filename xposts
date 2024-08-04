@@ -124,12 +124,14 @@ if ($opt_s>0) {
 
 if (defined($opt_j)) {
 	my ($data, $c) = tv2("get", $opt_j, $opt_j );
+	save_rates($opt_j, $c);
 	print Dumper($data);
 	show_stats();
 	exit(0);
 }
 if (defined($opt_J)) {
 	my ($data, $c) = tv1("get", $opt_J, $opt_J );
+	save_rates("$opt_J", $c);
 	print Dumper($data);
 	show_stats();
 	exit(0);
@@ -165,7 +167,7 @@ if (defined($opt_T)) {
 		#	}
 		#	catch {
 		#		print $_->http_request->as_string."\n";
-		#		print "x error code: ".$_->twitter_error_code."\n";
+		#		print "x error code: ".$_->X_error_code."\n";
 		#	};
 		#}
 		print expand_tweet(0, $tweets);
@@ -711,11 +713,12 @@ sub get_creds {
 	if (defined($me_glob)) {
 		return $me_glob;
 	}
-	my ($me, $c) = tv1("get","account/verify_credentials");
+	my ($me_glob, $c) = tv1("get","account/verify_credentials");
+	save_rates("account/verify_credentials", $c);
 	if ($v>0) {
 		print "query=account/verify_credentials\n";
 	}
-	return $me;
+	return $me_glob;
 }
 
 
@@ -1095,6 +1098,7 @@ sub set_alt_text {
 	my $payload->{"-to_json"} = $params;
 	($data, $c) = tv1("post", "media/metadata/create", $payload,
 		"media/metadata/create");
+	save_rates("media/metadata/create", $c);
 	if ($v>1) {
 		print "media/metadata/create result:\n".Dumper($data);
 	}
