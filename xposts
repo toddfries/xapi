@@ -31,6 +31,7 @@ use JSON;
 use MIME::Base64;
 use Storable;
 use Digest::SHA1 qw(sha1_hex);
+#use Image::Magick;
 
 my $ident = "Xposts";
 my $logopt = 'pid';
@@ -269,7 +270,10 @@ if (defined($opt_w)) {
 	my $payload = { };
 	$payload->{"-to_json"} = $req;
 
-	my $uname = uinfo()->{username};
+	my $uinfo = uinfo();
+	my $uname = $uinfo->{data}->{username};
+	#print "uinfo: ".Dumper($uinfo);
+	# see json/uinfo.json
 
 	if ($v>0) {
 		print "tweets payload = ".Dumper($payload);
@@ -280,6 +284,8 @@ if (defined($opt_w)) {
 	my $txt = $data->{data}->{text};
 	print "https://x.com/${uname}/status/${postid} \"${txt}\"\n";
 	show_stats();
+	#print "post.tweets.<msg> c: ".Dumper($c);
+	# see json/post.tweets.msg.json
 	exit(0);
 }
 
@@ -1050,21 +1056,35 @@ sub wait_till {
 sub file_to_mediaid {
 	my ($file) = @_;
 
+	my $mti = {
+		'JPEG' => 'image/jpeg',
+		'PNG'  => 'image/png',
+		'GIF'  => 'image/gif',
+	};
+
+	# verified not supported
+	#	'X pixmap' => 'image/x-xpixmap',
+
+	#my $img = Image::Magick->new;
+
 	my $mfh;
 	open ($mfh, '<:raw', $file) or die "Can't open file $mfh";
 	my $media_data;
 	read($mfh, $media_data, -s $mfh);
 	close($mfh);
+	#$img->Blob($media_data);
+	#my $format = $img->Get('format');
+	my $format = 'JPEG';
+	my $mt = $mti->{$format};
+	if (!defined($mt)) {
+		diestat("file_to_mediaid($file) format='$format' unsupported");
+	}
 	my $encoded_image = encode_base64($media_data);
-#	my $media_params = {
-#		media_type => 'image/jpeg',
-#		media_data => $encoded_image,
-#	};
-#	my $media = { media => $media_params };
 	my $payload = {
-		media_type => 'image/jpeg',
+		media_type => $mt,
 		media_data => $encoded_image,
 	};
+	print "payload: ".Dumper($payload);
 	my $query = $client1->upload_url_for('media/upload');
 	eval {
 		($data, $c) = $client1->request(post => $query, $payload);
@@ -1072,6 +1092,15 @@ sub file_to_mediaid {
 	if ($@) {
 		diestat("tv1($query):\n$@");
 	}
+	#print "post.media.upload: data ".Dumper($data);
+	#print "post.media.upload: c ".Dumper($data);
+	# see json/post.media.upload.data.json for both
+	printf "mid %d from %s %dx%d %s\n", $data->{media_id}, 
+		$file,
+		$data->{image}->{h},
+		$data->{image}->{w},
+		$data->{image}->{image_type};
+		
 	return $data;
 }
 sub like {
@@ -1102,6 +1131,7 @@ sub set_alt_text {
 	if (length($text) > 1000) {
 		printf "Alt text for media_id %d is %d bytes:\n", $mid, length($text);
 		printf "   '%s'\n", $text;
+		# verified as of 20240805 11:26:42 enforced
 		return;
 	}
 
@@ -1115,6 +1145,10 @@ sub set_alt_text {
 	($data, $c) = tv1("post", "media/metadata/create", $payload,
 		"media/metadata/create");
 	save_rates("media/metadata/create", $c);
+	#print "post.media.metadata.create: data ".Dumper($data);
+	# surprisingly, $VAR = ''
+	#print "post.media.metadata.create: c ".Dumper($c);
+	# see json/post.media.metadata.create.c.json
 	if ($v>1) {
 		print "media/metadata/create result:\n".Dumper($data);
 	}
@@ -1205,7 +1239,9 @@ sub read_from_cache {
 	my $filename = key_to_cache_filename($key);
 	my $fh;
 	if (!open($fh, '<', $filename)) {
-		warn "Could not open file '$filename': $!";
+		if ($v>1) {
+			warn "Could not open file '$filename': $!";
+		}
 		return undef;
 	}
 	local $/ = undef;  # Read the entire file at once
