@@ -306,11 +306,9 @@ if (defined($opt_w)) {
 
 if (defined($opt_B)) {
 	my $postid = $opt_B;
-	my $payload = {
-		-to_json => {
-			tweet_id => $postid,
-		},
-	};
+	my $req = { tweet_id => $postid };
+	my $payload = { };
+	$payload->{"-to_json"} = $req;
 
 	my $uid = uinfo()->{id};
 	my @res = tv2("post", "users/$uid/bookmarks", $payload);
@@ -321,11 +319,9 @@ if (defined($opt_B)) {
 if (defined($opt_d)) {
 	my $uid = $opt_d;
 	my $msg = $ARGV[0];
-	my $payload = {
-		-to_json => {
-			text => $msg,
-		},
-	};
+	my $req = { text => $msg };
+	my $payload = { };
+	$payload->{"-to_json"} = $req;
 	my @res = tv2("post", "dm_conversations/with/${uid}/messages", $payload);
 	print Dumper(@res);
 	show_stats();
@@ -1104,6 +1100,12 @@ sub file_to_mediaid {
 	my $img = Graphics::Magick->new;
 
 	my $status = $img->Read($file);
+	if ($status) {
+		if ($status =~ /^Exception 420/) {
+			# detect video and do https://developer.x.com/en/docs/twitter-api/v1/media/upload-media/uploading-media/chunked-media-upload
+			return video_to_mediaid( $file );
+		}
+	}
 	warn $status if "$status";
 	my $format = $img->Get('format');
 	if (defined($format)) {
@@ -1123,6 +1125,7 @@ sub file_to_mediaid {
 	my $payload = {
 		media_type => $mt,
 		media_data => $encoded_image,
+		media_category => ($mt eq "image/gif") ? 'tweet_gif' : 'tweet_image',
 	};
 	print "payload: ".Dumper($payload);
 	my $query = $client1->upload_url_for('media/upload');
@@ -1132,6 +1135,7 @@ sub file_to_mediaid {
 	if ($@) {
 		diestat("tv1($query):\n$@");
 	}
+	save_rates("media/upload", $c);
 	#print "post.media.upload: data ".Dumper($data);
 	#print "post.media.upload: c ".Dumper($data);
 	# see json/post.media.upload.data.json for both
@@ -1142,6 +1146,93 @@ sub file_to_mediaid {
 		$data->{image}->{image_type};
 		
 	return $data;
+}
+sub video_to_mediaid {
+	my ($file) = @_;
+
+	my $chunk_size = 1024 * 1024; # 1mb, max 5mb
+	my @stats = stat($file);
+	my $size = $stats[7];
+	my $cdata = chunk_init('video/mp4', $size);
+	#print "video_to_mediaid: init cdata ".Dumper($cdata);
+	printf "video_to_mediaid(%s) media_key = '%s', media_id = '%s'\n", $file, $cdata->{media_key}, $cdata->{media_id};
+	my $expiration = time() + $cdata->{expires_after_secs} - 1;
+	my $mid = $cdata->{media_id};
+
+	open(my $fh, '<:raw', $file) or die "video_to_mediaid: Cannot open $file: $!";
+	binmode $fh;
+	my $chunk = '';
+	my $chunk_num = 0;
+	my $chunk_sent = 0;
+	while(read($fh, $chunk, $chunk_size) != 0) {
+		$cdata = chunk_append($mid, $chunk, $chunk_num);
+		$chunk_sent += length($chunk);
+		printf "video_to_mediaid %d sent %d total of %d bytes\n", $chunk_num, length($chunk), $chunk_sent;
+		$chunk_num++;
+	}
+	close($fh);
+	$cdata = chunk_finalize($mid);
+	print "video_to_mediaid: finalize cdata ".Dumper($cdata);
+	return $mid;
+}
+
+sub chunk_init {
+	my ($type, $size) = @_;
+
+	my $payload = { };
+	$payload->{'command'} = "INIT";
+	$payload->{'media_type'} = $type;
+	$payload->{'media_category'} = 'tweet_video';
+	$payload->{'total_bytes'} = $size;
+
+	printf "chunk_init(%s, %d)\n", $type, $size;
+	my $query = $client1->upload_url_for('media/upload');
+	eval {
+		($data, $c) = $client1->request(post => $query, $payload);
+	};
+	if ($@) {
+		diestat("chunk_init: client1($query, { media_type => $type, total_bytes => $size }: $@");
+	}
+	save_rates("media/upload", $c);
+	return $data;
+}
+sub chunk_append {
+	my ($mid, $chunk, $chunk_num) = @_;
+
+	my $payload = { };
+	$payload->{'command'} = "APPEND";
+	$payload->{'media_id'} = $mid;
+	$payload->{'segment_index'} = $chunk_num;
+	$payload->{'media'} = $chunk;
+
+	printf "chunk_append(%s, len(chunk)=%d, %s)\n", $mid, length($chunk), $chunk_num;
+
+	my $query = $client1->upload_url_for('media/upload');
+	eval {
+		($data, $c) = $client1->request(post => $query, $payload);
+	};
+	if ($@) {
+		diestat("chunk_append: client1($query, { media_id => $mid, segment_index => ${chunk_num} }: $@");
+	}
+	save_rates("media/upload", $c);
+	return $data;
+}
+sub chunk_finalize {
+	my ($mid) = @_;
+
+	my $payload = { };
+	$payload->{'command'} = "FINALIZE";
+	$payload->{'media_id'} = $mid;
+
+	my $query = $client1->upload_url_for('media/upload');
+	eval {
+		($data, $c) = $client1->request(post => $query, $payload);
+	};
+	if ($@) {
+		diestat("chunk_finalize: client1($query, { media_id => $mid }: $@");
+	}
+	save_rates("media/upload", $c);
+	return $data->{$data};
 }
 sub like {
 	my (@args) = @_;
