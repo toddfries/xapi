@@ -31,7 +31,7 @@ use JSON;
 use MIME::Base64;
 use Storable;
 use Digest::SHA1 qw(sha1_hex);
-#use Image::Magick;
+use Graphics::Magick;
 
 my $ident = "Xposts";
 my $logopt = 'pid';
@@ -286,7 +286,7 @@ if (defined($opt_w)) {
 	$payload->{"-to_json"} = $req;
 
 	my $uinfo = uinfo();
-	my $uname = $uinfo->{data}->{username};
+	my $uname = $uinfo->{username};
 	#print "uinfo: ".Dumper($uinfo);
 	# see json/uinfo.json
 
@@ -435,7 +435,7 @@ sub cache_write {
 
 sub uinfo {
 	my $me = get_creds();
-	my $uc = umcache_read($me->{screen_name});
+	my $uc = cache_read('u',$me->{screen_name});
 	if (defined($uc)) {
 		return $uc;
 	}
@@ -448,13 +448,13 @@ sub uinfo {
 		"possibly_sensitive,public_metrics,referenced_tweets,reply_settings,scopes,source,text,".
 		"username,withheld", "users/me" );
 	umcache_write($data->{data});
-	return $data;
+	return $data->{data};
 }
 
 sub getuser_byname {
 	my ($who) = @_;
 
-	my $data = umcache_read($who);
+	my $data = cache_read('u',$who);
 	if (defined($data)) {
 		#print "ucache hit  ".$data->{id}."\n";
 		return $data;
@@ -483,7 +483,7 @@ sub getuser_byname {
 sub getuser_byid {
 	my ($id) = @_;
 
-	my $data = umcache_read($id);
+	my $data = cache_read('u',$id);
 	if (defined($data)) {
 		#print "ucache hit  ".$data->{id}."\n";
 		return $data;
@@ -521,7 +521,7 @@ sub expand_tweet {
 	}
 
 	foreach my $user ( @{ $tweets->{includes}->{users} } ) {
-		if (defined(umcache_read($user->{id}))) {
+		if (defined(cache_read('u',$user->{id}))) {
 			next;
 		}
 		umcache_write($user);
@@ -1090,28 +1090,35 @@ sub file_to_mediaid {
 	my ($file) = @_;
 
 	my $mti = {
-		'JPEG' => 'image/jpeg',
-		'PNG'  => 'image/png',
-		'GIF'  => 'image/gif',
+		'JPEG format' => 'image/jpeg',
+		'JFIF format' => 'image/jpeg',
+		'PNG format'  => 'image/png',
+		'Portable Network Graphics' => 'image/png',
+		'GIF format'  => 'image/gif',
+		'CompuServe graphics interchange format' => 'image/gif',
 	};
 
 	# verified not supported
 	#	'X pixmap' => 'image/x-xpixmap',
 
-	#my $img = Image::Magick->new;
+	my $img = Graphics::Magick->new;
 
-	my $mfh;
-	open ($mfh, '<:raw', $file) or die "Can't open file $mfh";
-	my $media_data;
-	read($mfh, $media_data, -s $mfh);
-	close($mfh);
-	#$img->Blob($media_data);
-	#my $format = $img->Get('format');
-	my $format = 'JPEG';
-	my $mt = $mti->{$format};
+	my $status = $img->Read($file);
+	warn $status if "$status";
+	my $format = $img->Get('format');
+	if (defined($format)) {
+		print "format=$format for $file\n";
+	}
+	my $mt;
+	foreach my $f (keys %{ $mti }) {
+		if ($format =~ /$f$/) {
+			$mt = $mti->{$f};
+		}
+	}
 	if (!defined($mt)) {
 		diestat("file_to_mediaid($file) format='$format' unsupported");
 	}
+	my ($media_data) = $img->ImageToBlob();
 	my $encoded_image = encode_base64($media_data);
 	my $payload = {
 		media_type => $mt,
