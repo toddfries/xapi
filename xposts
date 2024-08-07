@@ -57,6 +57,7 @@ our $opt_T; # show an individual post
 our $opt_v; # verbosity
 our $opt_L; # show owned lists
 our $opt_N; # no syslog
+our $opt_O; # var=val1,val2,val3;var2=val4,val5;var3=val6
 
 our $opt_w; # write a post, $opt_w is message
 our $opt_R; #  post reply_settings { "mentionedUsers", "followers", "everyone", "" }
@@ -77,7 +78,7 @@ $opt_r = 10;
 $opt_s = 0;
 $opt_v = 0;
 
-getopts('a:bc:d:j:lqr:su:vw:B:I:J:ST:LNW:');
+getopts('a:bc:d:j:lqr:su:vw:B:I:J:ST:LNO:W:');
 
 if (!defined($opt_c)) {
 	die "Config file '${opt_c}' EEXIST";
@@ -86,10 +87,24 @@ if (!defined($opt_c)) {
 my $rc = ReadConf->new();
 my $conf = $rc->readconf($opt_c);
 
+my $section = "creds";
+
+#if (defined($opt_O)) {
+
 my $c = $conf->{creds};
 
 if (!defined($c)) {
 	die "[creds] not found in xapi.conf";
+}
+
+if (!defined($c->{cache_prefix})) {
+	die "[creds]cache_prefix not found";
+}
+my $cache_prefix = $c->{cache_prefix};
+$cachedir .= "/${cache_prefix}";
+mkdir($cachedir);
+if (! -d $cachedir) {
+	die "Could not mkdir($cachedir)";
 }
 
 our $me_glob;
@@ -728,10 +743,11 @@ sub get_creds {
 	if (defined($me_glob)) {
 		return $me_glob;
 	}
-	my $data = read_from_cache("get.account.verifiy_credentials");
+	my $ck = "get.account.verifiy_credentials";
+	my $data = read_from_cache($ck);
 	if (defined($data)) {
 		$me_glob = $data;
-		print "read_from_cache(get.account.verify.credentials) success!\n";
+		print "read_from_cache($ck) success!\n";
 		return $me_glob;
 	}
 	my ($me_glob, $c) = tv1("get","account/verify_credentials");
@@ -739,7 +755,7 @@ sub get_creds {
 	if ($v>0) {
 		print "query=account/verify_credentials\n";
 	}
-	write_to_cache("get.account.verify_credentials", $me_glob);
+	write_to_cache($ck, $me_glob);
 	return $me_glob;
 }
 
@@ -1227,23 +1243,36 @@ sub write_to_cache {
 	my ($key, $data) = @_;
 	my $filename = key_to_cache_filename($key);
 	if (!defined($data)) {
+		printf "Cache but no data %d\n", $filename;
 		return;
 	}
 
+	print "Cache write $filename ($key)\n";
 	open my $fh, '>', $filename or die "Could not open file '$filename': $!";
 	print $fh Storable::nfreeze($data);
 	close $fh;
 }
 sub read_from_cache {
-	my ($key) = @_;
+	my ($key, $ttl) = @_;
 	my $filename = key_to_cache_filename($key);
-	my $fh;
-	if (!open($fh, '<', $filename)) {
-		if ($v>1) {
-			warn "Could not open file '$filename': $!";
-		}
+	if (!defined($ttl)) {
+		$ttl = 3600;
+	}
+	if (!-e $filename) {
 		return undef;
 	}
+	if ( (time - (stat($filename))[9]) > $ttl) {
+		unlink($filename);
+		return undef;
+	}
+	my $fh;
+	if (!open($fh, '<', $filename)) {
+		#if ($v>1) {
+			warn "Could not open file '$filename': $!";
+		#}
+		return undef;
+	}
+	print "Cache read $filename ($key)\n";
 	local $/ = undef;  # Read the entire file at once
 	my $data = Storable::thaw(<$fh>);
 	close $fh;
