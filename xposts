@@ -132,7 +132,7 @@ our $client2 = X::API->new_with_traits(
 );
 #print Dumper($client2);
 
-our $umemcache = { }; # users
+our $gc = { }; # Global Cache
 our $pmemcache = { }; # posts
 our $mmemcache = { }; # media
 our $smemcache = { }; # stats
@@ -397,12 +397,12 @@ if (! defined($opt_q)) {
 show_stats();
 1;
 
-sub umcache_ck {
+sub umcache_read {
 	my ($var) = @_;
 
-	return $umemcache->{$var};
+	return cache_read('u',$var);
 }
-sub umcache_add {
+sub umcache_write {
 	my ($data) = @_;
 
 	my $id = $data->{id};
@@ -413,12 +413,29 @@ sub umcache_add {
 
 	# double mem use but easier lookup
 
-	$umemcache->{$id} = $data;
-	$umemcache->{$who} = $data;
+	cache_write('u', $id, $data);
+	cache_write('u', $who, $data);
 }
+
+sub cache_read {
+	my ($cname, $var) = @_;
+
+	my $data = $gc->{$cname}->{$var};
+	if (!defined($data)) {
+		$data = read_from_cache("${cname}.${var}");
+	}
+	return $data;
+
+}
+sub cache_write {
+	my ($cname, $var, $val) = @_;
+	$gc->{$cname}->{$var} = $val;
+	write_to_cache("${cname}.${var}", $val);
+}
+
 sub uinfo {
 	my $me = get_creds();
-	my $uc = umcache_ck($me->{screen_name});
+	my $uc = umcache_read($me->{screen_name});
 	if (defined($uc)) {
 		return $uc;
 	}
@@ -430,14 +447,14 @@ sub uinfo {
 		"edit_controls,edit_history_tweet_ids,entities,geo,id,in_reply_to_user_id,lang,note_tweet,".
 		"possibly_sensitive,public_metrics,referenced_tweets,reply_settings,scopes,source,text,".
 		"username,withheld", "users/me" );
-	umcache_add($data->{data});
+	umcache_write($data->{data});
 	return $data;
 }
 
 sub getuser_byname {
 	my ($who) = @_;
 
-	my $data = umcache_ck($who);
+	my $data = umcache_read($who);
 	if (defined($data)) {
 		#print "ucache hit  ".$data->{id}."\n";
 		return $data;
@@ -459,14 +476,14 @@ sub getuser_byname {
 	if ($v>0) {
 		print Dumper($data);
 	}
-	umcache_add($data);
+	umcache_write($data);
 
 	return $data;
 }
 sub getuser_byid {
 	my ($id) = @_;
 
-	my $data = umcache_ck($id);
+	my $data = umcache_read($id);
 	if (defined($data)) {
 		#print "ucache hit  ".$data->{id}."\n";
 		return $data;
@@ -475,7 +492,7 @@ sub getuser_byid {
 	($data, $c) = tv2("get","users/${id}","users/:id");
 	$data = $data->{data};
 
-	umcache_add($data);
+	umcache_write($data);
 
 	return $data;
 }
@@ -504,10 +521,10 @@ sub expand_tweet {
 	}
 
 	foreach my $user ( @{ $tweets->{includes}->{users} } ) {
-		if (defined(umcache_ck($user->{id}))) {
+		if (defined(umcache_read($user->{id}))) {
 			next;
 		}
-		umcache_add($user);
+		umcache_write($user);
 	}
 	foreach my $tweet ( @{ $tweets->{includes}->{tweets} } ) {
 		#diestat(" tweet: ". Dumper($tweet));

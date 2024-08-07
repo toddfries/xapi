@@ -15,3 +15,5 @@
   .. where everything refreshes at 1h
   .. consider looking at api limits and staying under on purpose with memo about trying agin in X minutes?
   
+perl ./xposts -v -c /home/todd/.config/xapi/statapi.conf  -j delete/1811079852960731544
+perl ./xposts -j POST users/218538224/bookmarks tid=1811079852960731544
