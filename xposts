@@ -1264,7 +1264,7 @@ sub chunk_check_status {
 		$payload->{'media_id'} = $data->{media_id};
 
 		eval {
-			($data, $c) = $client1->request(post => $query, $payload);
+			($data, $c) = $client1->request(get => $query, $payload);
 		};
 		if ($@) {
 			my $msg = sprintf("chunk_check_status: state=%s, check_after_secs=%s: $@\n",
