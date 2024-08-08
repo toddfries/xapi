@@ -1254,10 +1254,6 @@ sub chunk_check_status {
 		print "chunk_check_status no pi? dumping data: ".Dumper($data);
 		return;
 	}
-	printf "chunk_check_status: %s %ss\n", 
-		$pi->{state},
-		$pi->{'check_after_secs'};
-
 	my $query = $client1->upload_url_for('media/upload');
 	while (1)
 	{
