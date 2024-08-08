@@ -1182,6 +1182,7 @@ sub video_to_mediaid {
 	close($fh);
 	$cdata = chunk_finalize($mid);
 	print "video_to_mediaid: finalize cdata ".Dumper($cdata);
+	chunk_check_status($cdata);
 	return $cdata;
 }
 
@@ -1247,33 +1248,40 @@ sub chunk_finalize {
 sub chunk_check_status {
 	my ($data) = @_;
 
-	if (!defined($data->{'processing_info'})) {
+	my $pi = $data->{'processing_info'};
+
+	if (!defined($pi)) {
+		print "chunk_check_status no pi? dumping data: ".Dumper($data);
 		return;
 	}
 	printf "chunk_check_status: %s %ss\n", 
-		$data->{'processing_info'}->{status},
-		$data->{'processing_info'}->{'check_after_secs'};
+		$pi->{state},
+		$pi->{'check_after_secs'};
 
-	while ($data->{'processing_info'}->{'state'} eq "pending")
+	my $query = $client1->upload_url_for('media/upload');
+	while (1)
 	{
-		printf "chunk_check_status: pending, sleep %ds\n", $data->{'processing_info'}->{'check_after_secs'};
-		sleep($data->{'processing_info'}->{'check_after_secs'} * 2);
+		printf "chunk_check_status: %s, sleep %ds\n", $pi->{state}, $pi->{'check_after_secs'};
+		sleep($pi->{'check_after_secs'} * 2);
 		my $payload = { };
 		$payload->{'command'} = "STATUS";
-		$payload->{'media_ids'} = $data->{media_id};
+		$payload->{'media_id'} = $data->{media_id};
 
-		my $query = $client1->upload_url_for('media/upload');
 		eval {
 			($data, $c) = $client1->request(post => $query, $payload);
 		};
 		if ($@) {
-			my $msg = sprintf("chunk_check_status: state=%s, check_after_secs=%s\n",
-				$data->{'processing_info'}->{status},
+			my $msg = sprintf("chunk_check_status: state=%s, check_after_secs=%s: $@\n",
+				$data->{'processing_info'}->{state},
 				$data->{'processing_info'}->{'check_after_secs'},
 			);
 			diestat($msg);
 		}
 		save_rates("media/upload", $c);
+		$pi = $data->{'processing_info'};
+		if ($pi->{state} =~ /^(failed|succeeded)/) {
+			last;
+		}
 	}
 
 }
@@ -1356,7 +1364,6 @@ sub post {
 			} else {
 				$mdata = file_to_mediaid( $f );
 				$mid = $mdata->{media_id};
-				chunk_check_status($mdata);
 			}
 			$mstr = sprintf("%s", $mid);
 			#if ($v>0) {
