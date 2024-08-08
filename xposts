@@ -1166,7 +1166,7 @@ sub video_to_mediaid {
 	my $size = $stats[7];
 	my $cdata = chunk_init('video/mp4', $size);
 	#print "video_to_mediaid: init cdata ".Dumper($cdata);
-	printf "video_to_mediaid(%s) media_key = '%s', media_id = '%s'\n", $file, $cdata->{media_key}, $cdata->{media_id};
+	#printf "video_to_mediaid(%s) media_key = '%s', media_id = '%s'\n", $file, $cdata->{media_key}, $cdata->{media_id};
 	my $expiration = time() + $cdata->{expires_after_secs} - 1;
 	my $mid = $cdata->{media_id};
 
@@ -1176,10 +1176,8 @@ sub video_to_mediaid {
 	my $chunk_num = 0;
 	my $chunk_sent = 0;
 	while(read($fh, $chunk, $chunk_size) != 0) {
-		$cdata = chunk_append($mid, $chunk, $chunk_num);
+		$cdata = chunk_append($mid, $chunk, $chunk_num++);
 		$chunk_sent += length($chunk);
-		printf "video_to_mediaid %d sent %d total of %d bytes\n", $chunk_num, length($chunk), $chunk_sent;
-		$chunk_num++;
 	}
 	close($fh);
 	$cdata = chunk_finalize($mid);
@@ -1189,6 +1187,7 @@ sub video_to_mediaid {
 
 sub chunk_init {
 	my ($type, $size) = @_;
+	printf "chunk_init(%s, %d)\n", $type, $size;
 
 	my $payload = { };
 	$payload->{'command'} = "INIT";
@@ -1196,7 +1195,6 @@ sub chunk_init {
 	$payload->{'media_category'} = 'tweet_video';
 	$payload->{'total_bytes'} = $size;
 
-	printf "chunk_init(%s, %d)\n", $type, $size;
 	my $query = $client1->upload_url_for('media/upload');
 	eval {
 		($data, $c) = $client1->request(post => $query, $payload);
@@ -1209,6 +1207,7 @@ sub chunk_init {
 }
 sub chunk_append {
 	my ($mid, $chunk, $chunk_num) = @_;
+	printf "chunk_append(%s, len(chunk)=%d, %s)\n", $mid, length($chunk), $chunk_num;
 
 	my $payload = { };
 	$payload->{'command'} = "APPEND";
@@ -1216,7 +1215,6 @@ sub chunk_append {
 	$payload->{'segment_index'} = $chunk_num;
 	$payload->{'media'} = $chunk;
 
-	printf "chunk_append(%s, len(chunk)=%d, %s)\n", $mid, length($chunk), $chunk_num;
 
 	my $query = $client1->upload_url_for('media/upload');
 	eval {
@@ -1230,6 +1228,7 @@ sub chunk_append {
 }
 sub chunk_finalize {
 	my ($mid) = @_;
+	printf "chunk_finalize(%s)\n", $mid;
 
 	my $payload = { };
 	$payload->{'command'} = "FINALIZE";
@@ -1243,7 +1242,7 @@ sub chunk_finalize {
 		diestat("chunk_finalize: client1($query, { media_id => $mid }: $@");
 	}
 	save_rates("media/upload", $c);
-	return $data->{$data};
+	return $data;
 }
 sub like {
 	my (@args) = @_;
