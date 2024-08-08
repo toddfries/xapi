@@ -1182,7 +1182,7 @@ sub video_to_mediaid {
 	close($fh);
 	$cdata = chunk_finalize($mid);
 	print "video_to_mediaid: finalize cdata ".Dumper($cdata);
-	return $mid;
+	return $cdata;
 }
 
 sub chunk_init {
@@ -1244,6 +1244,40 @@ sub chunk_finalize {
 	save_rates("media/upload", $c);
 	return $data;
 }
+sub chunk_check_status {
+	my ($data) = @_;
+
+	if (!defined($data->{'processing_info'})) {
+		return;
+	}
+	printf "chunk_check_status: %s %ss\n", 
+		$data->{'processing_info'}->{status},
+		$data->{'processing_info'}->{'check_after_secs'};
+
+	while ($data->{'processing_info'}->{'state'} eq "pending")
+	{
+		printf "chunk_check_status: pending, sleep %ds\n", $data->{'processing_info'}->{'check_after_secs'};
+		sleep($data->{'processing_info'}->{'check_after_secs'} * 2);
+		my $payload = { };
+		$payload->{'command'} = "STATUS";
+		$payload->{'media_ids'} = $data->{media_id};
+
+		my $query = $client1->upload_url_for('media/upload');
+		eval {
+			($data, $c) = $client1->request(post => $query, $payload);
+		};
+		if ($@) {
+			my $msg = sprintf("chunk_check_status: state=%s, check_after_secs=%s\n",
+				$data->{'processing_info'}->{status},
+				$data->{'processing_info'}->{'check_after_secs'},
+			);
+			diestat($msg);
+		}
+		save_rates("media/upload", $c);
+	}
+
+}
+
 sub like {
 	my (@args) = @_;
 	if (!defined($args[0])) {
@@ -1322,6 +1356,7 @@ sub post {
 			} else {
 				$mdata = file_to_mediaid( $f );
 				$mid = $mdata->{media_id};
+				chunk_check_status($mdata);
 			}
 			$mstr = sprintf("%s", $mid);
 			#if ($v>0) {
