@@ -89,7 +89,15 @@ my $conf = $rc->readconf($opt_c);
 
 my $section = "creds";
 
-#if (defined($opt_O)) {
+our $opts = { };
+if (defined($opt_O)) {
+	foreach my $opt (split(/;/,$opt_O)) {
+		if ($opt =~ /^([^=]+)=(.*)$/) {
+			my ($var, $val) = ($1, $2);
+			$opts->{$var} = $val;
+		}
+	}
+}
 
 my $c = $conf->{creds};
 
@@ -1150,7 +1158,10 @@ sub file_to_mediaid {
 sub video_to_mediaid {
 	my ($file) = @_;
 
-	my $chunk_size = 1024 * 1024; # 1mb, max 5mb
+	my $chunk_size = 4 * 1024 * 1024; # 1mb, max 5mb
+	if (defined($opts->{chunksize})) {
+		$chunk_size = $opts->{chunksize};
+	}
 	my @stats = stat($file);
 	my $size = $stats[7];
 	my $cdata = chunk_init('video/mp4', $size);
