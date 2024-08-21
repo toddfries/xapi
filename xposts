@@ -63,6 +63,7 @@ our $opt_w; # write a post, $opt_w is message
 our $opt_R; #  post reply_settings { "mentionedUsers", "followers", "everyone", "" }
 our $opt_W; #  post reply id
 our $opt_I; #  post image filename
+our $opt_i; #  post image filename
 our $opt_d; # write a dm message $opt_d is uid, $ARGV[0] is message
 our $opt_B; # '-B postid' bookmark postid
 our $opt_u; # upload a media file and get an id
@@ -79,6 +80,10 @@ $opt_s = 0;
 $opt_v = 0;
 
 getopts('a:bc:d:j:lqr:su:vw:B:I:J:ST:LNO:W:');
+
+if (!defined($opt_I)) {
+	$opt_I = $opt_i;
+}
 
 if (!defined($opt_c)) {
 	die "Config file '${opt_c}' EEXIST";
@@ -122,6 +127,7 @@ our $client1 = X::API->new_with_traits(
 	#api_ext	=> '',
 	traits => [ qw/ApiMethods/ ],
 	#traits => [ qw/Enchilada/ ],
+	agent => "v2UserLookupJS",
 	consumer_key	=> $c->{consumer_key},
 	consumer_secret => $c->{consumer_secret},
 	access_token	=> $c->{access_token},
@@ -298,7 +304,7 @@ if (defined($opt_w)) {
 	#print "uinfo: ".Dumper($uinfo);
 	# see json/uinfo.json
 
-	if ($v>0) {
+	if ($v>1) {
 		print "tweets payload = ".Dumper($payload);
 	}
 
@@ -792,6 +798,14 @@ sub show_mystats {
 	my $followers = $me->{followers_count};
 	my $listed = $me->{listed_count};
 	my $screen_name = $me->{screen_name};
+	my $id = uinfo->{id};
+	my $verified = uinfo()->{verified};
+	my $verified_type = uinfo()->{verified_type};
+	my $subscription_type = uinfo()->{subscription_type};
+	if (!defined($opt_q)) {
+		printf "uinfo: id=%s, verified=%s, verified_type=%s, subscription_type=%s\n",
+			$id, $verified, $verified_type, $subscription_type;
+	}
 	my $output = "";
 	$output .= sprintf "%s: ", $screen_name;
 	$output .= sprintf " %d favs, %d friends, %d statuses, %d followers, %d listed\n",
@@ -1120,9 +1134,11 @@ sub file_to_mediaid {
 		print "format=$format for $file\n";
 	}
 	my $mt;
-	foreach my $f (keys %{ $mti }) {
-		if ($format =~ /$f$/) {
-			$mt = $mti->{$f};
+	if (defined($format)) {
+		foreach my $f (keys %{ $mti }) {
+			if ($format =~ /$f$/) {
+				$mt = $mti->{$f};
+			}
 		}
 	}
 	if (!defined($mt)) {
