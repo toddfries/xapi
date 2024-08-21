@@ -58,6 +58,7 @@ our $opt_v; # verbosity
 our $opt_L; # show owned lists
 our $opt_N; # no syslog
 our $opt_O; # var=val1,val2,val3;var2=val4,val5;var3=val6
+our $opt_p; # arbitrary v2 query to post json output call;var1=val1;var2=val2
 
 our $opt_w; # write a post, $opt_w is message
 our $opt_R; #  post reply_settings { "mentionedUsers", "followers", "everyone", "" }
@@ -79,7 +80,7 @@ $opt_r = 10;
 $opt_s = 0;
 $opt_v = 0;
 
-getopts('a:bc:d:j:lqr:su:vw:B:I:J:ST:LNO:W:');
+getopts('a:bc:d:j:lqp:r:su:vw:B:I:J:ST:LNO:W:');
 
 if (!defined($opt_I)) {
 	$opt_I = $opt_i;
@@ -337,6 +338,20 @@ if (defined($opt_d)) {
 	my $payload = { };
 	$payload->{"-to_json"} = $req;
 	my @res = tv2("post", "dm_conversations/with/${uid}/messages", $payload);
+	print Dumper(@res);
+	show_stats();
+	exit(0);
+}
+if (defined($opt_p)) {
+	my ($call,@payloads) = split(/;/,$opt_p);
+	my $req = { };
+	foreach my $part ( @payloads ) {
+		my ($var,$val) = split(/=/,$part);
+		$req->{$var} = $val;
+	}
+	my $payload = { };
+	$payload->{"-to_json"} = $req;
+	my @res = tv2("post", $call, $payload);
 	print Dumper(@res);
 	show_stats();
 	exit(0);
