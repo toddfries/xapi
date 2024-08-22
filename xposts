@@ -1166,7 +1166,9 @@ sub file_to_mediaid {
 		media_data => $encoded_image,
 		media_category => ($mt eq "image/gif") ? 'tweet_gif' : 'tweet_image',
 	};
-	print "payload: ".Dumper($payload);
+	if ($v>1) {
+		print "payload: ".Dumper($payload);
+	}
 	my $query = $client1->upload_url_for('media/upload');
 	eval {
 		($data, $c) = $client1->request(post => $query, $payload);
