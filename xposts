@@ -158,7 +158,7 @@ openlog($ident, $logopt, $facility);
 
 if ($opt_s>0) {
 	show_mystats();
-	show_stats();
+	show_rates();
 	exit(0);
 }
 
@@ -166,14 +166,14 @@ if (defined($opt_j)) {
 	my ($data, $c) = tv2("get", $opt_j, $opt_j );
 	save_rates($opt_j, $c);
 	print Dumper($data);
-	show_stats();
+	show_rates();
 	exit(0);
 }
 if (defined($opt_J)) {
 	my ($data, $c) = tv1("get", $opt_J, $opt_J );
 	save_rates("$opt_J", $c);
 	print Dumper($data);
-	show_stats();
+	show_rates();
 	exit(0);
 }
 	
@@ -181,7 +181,7 @@ if (defined($opt_J)) {
 
 if ($opt_b>0) {
 	show_bookmarks();
-	show_stats();
+	show_rates();
 	exit(0);
 }
 
@@ -212,7 +212,7 @@ if (defined($opt_T)) {
 		#}
 		print expand_tweet(0, $tweets);
 	}
-	show_stats();
+	show_rates();
 	exit(0);
 }
 
@@ -224,7 +224,7 @@ if (defined($opt_u)) {
 	my $mdata = file_to_mediaid( $file );
 	
 	printf "media_id=%s name=%s\n", $mdata->{media_id}, $file;
-	show_stats();
+	show_rates();
 	exit(0);
 }
 if (defined($opt_a)) {
@@ -243,7 +243,7 @@ if (defined($opt_a)) {
 	if ($opt_a eq "uinfo") {
 		my $data = uinfo();
 		print Dumper($data);
-		show_stats();
+		show_rates();
 		exit(0);
 	}
 	die "unknown action ${opt_a}";
@@ -297,9 +297,6 @@ if (defined($opt_w)) {
 	# $req->{geo} = $geoobj; ?
 	# $req->{geo}->{place_id} = $geo_place_id;
 
-	my $payload = { };
-	$payload->{"-to_json"} = $req;
-
 	my $uinfo = uinfo();
 	my $uname = $uinfo->{username};
 	#print "uinfo: ".Dumper($uinfo);
@@ -309,11 +306,11 @@ if (defined($opt_w)) {
 		print "tweets payload = ".Dumper($payload);
 	}
 
-	my ($data, $c) = tv2("post", "tweets", $payload, "tweets");
+	my ($data, $c) = post_callv2("tweets", $req);
 	my $postid = $data->{data}->{id};
 	my $txt = $data->{data}->{text};
 	print "https://x.com/${uname}/status/${postid} \"${txt}\"\n";
-	show_stats();
+	show_rates();
 	#print "post.tweets.<msg> c: ".Dumper($c);
 	# see json/post.tweets.msg.json
 	exit(0);
@@ -328,7 +325,7 @@ if (defined($opt_B)) {
 	my $uid = uinfo()->{id};
 	my @res = tv2("post", "users/$uid/bookmarks", $payload);
 	print Dumper(@res);
-	show_stats();
+	show_rates();
 	exit(0);
 }
 if (defined($opt_d)) {
@@ -339,7 +336,7 @@ if (defined($opt_d)) {
 	$payload->{"-to_json"} = $req;
 	my @res = tv2("post", "dm_conversations/with/${uid}/messages", $payload);
 	print Dumper(@res);
-	show_stats();
+	show_rates();
 	exit(0);
 }
 if (defined($opt_p)) {
@@ -349,12 +346,18 @@ if (defined($opt_p)) {
 		my ($var,$val) = split(/=/,$part);
 		$req->{$var} = $val;
 	}
+	my ($data, $c) = post_callv2($call,$req);
+	save_rates($call, $c);
+	show_rates();
+	exit(0);
+}
+sub post_callv2 {
+	my ($call,$req) = @_;
 	my $payload = { };
 	$payload->{"-to_json"} = $req;
 	my @res = tv2("post", $call, $payload);
 	print Dumper(@res);
-	show_stats();
-	exit(0);
+	return @res;
 }
 	
 
@@ -367,7 +370,7 @@ if (defined($opt_S)) {
 	foreach my $who (@ARGV) {
 		show_ustats($who);
 	}
-	show_stats();
+	show_rates();
 	exit(0);
 }
 
@@ -385,7 +388,7 @@ if ($maxres > 100) {
 
 if ($opt_L>0) {
 	show_owned_lists($who);
-	show_stats();
+	show_rates();
 	exit(0);
 }
 
@@ -419,7 +422,7 @@ if (! defined($opt_q)) {
 	print expand_tweet(0, $tweets);
 }
 
-show_stats();
+show_rates();
 1;
 
 sub umcache_read {
@@ -948,10 +951,10 @@ sub diestat {
 
 	print STDERR $string;
 	print STDERR "\n";
-	show_stats();
+	show_rates();
 	exit(1);
 }
-sub show_stats {
+sub show_rates {
 	if (defined($opt_q)) {
 		return;
 	}
@@ -1427,7 +1430,7 @@ sub post {
 	my $postid = $data->{data}->{id};
 	my $txt = $data->{data}->{text};
 	print "https://x.com/${uname}/status/${postid} \"${txt}\"\n";
-	show_stats();
+	show_rates();
 	exit(0);
 }
 sub key_to_cache_filename {
