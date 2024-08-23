@@ -794,7 +794,6 @@ sub get_creds {
 	my $data = read_from_cache($ck);
 	if (defined($data)) {
 		$me_glob = $data;
-		print "read_from_cache($ck) success!\n";
 		return $me_glob;
 	}
 	my ($me_glob, $c) = tv1("get","account/verify_credentials");
@@ -1127,6 +1126,17 @@ sub wait_till {
 sub file_to_mediaid {
 	my ($file) = @_;
 
+	open(FH, "<", $file);
+	my $sha = Digest::SHA1->new;
+	$sha->addfile(*FH);
+	close(FH);
+
+	my $filesha = $sha->hexdigest;
+	my $data = read_from_cache($filesha, 0);
+	if (defined($data)) {
+		return $data;
+	}
+
 	my $mti = {
 		'JPEG format' => 'image/jpeg',
 		'JFIF format' => 'image/jpeg',
@@ -1145,7 +1155,9 @@ sub file_to_mediaid {
 	if ($status) {
 		if ($status =~ /^Exception 420/) {
 			# detect video and do https://developer.x.com/en/docs/twitter-api/v1/media/upload-media/uploading-media/chunked-media-upload
-			return video_to_mediaid( $file );
+			$data = video_to_mediaid( $file );
+			write_to_cache($filesha, $data);
+			return $data;
 		}
 	}
 	warn $status if "$status";
@@ -1190,7 +1202,7 @@ sub file_to_mediaid {
 		$data->{image}->{h},
 		$data->{image}->{w},
 		$data->{image}->{image_type};
-		
+	write_to_cache($filesha, $data);
 	return $data;
 }
 sub video_to_mediaid {
@@ -1462,9 +1474,11 @@ sub read_from_cache {
 	if (!-e $filename) {
 		return undef;
 	}
-	if ( (time - (stat($filename))[9]) > $ttl) {
-		unlink($filename);
-		return undef;
+	if ($ttl != 0) {
+		if ( (time - (stat($filename))[9]) > $ttl) {
+			unlink($filename);
+			return undef;
+		}
 	}
 	my $fh;
 	if (!open($fh, '<', $filename)) {
@@ -1477,5 +1491,6 @@ sub read_from_cache {
 	local $/ = undef;  # Read the entire file at once
 	my $data = Storable::thaw(<$fh>);
 	close $fh;
+	print "read_from_cache($key) success!\n";
 	return $data;
 }
