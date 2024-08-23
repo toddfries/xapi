@@ -302,9 +302,6 @@ if (defined($opt_w)) {
 	#print "uinfo: ".Dumper($uinfo);
 	# see json/uinfo.json
 
-	if ($v>1) {
-		print "tweets payload = ".Dumper($payload);
-	}
 
 	my ($data, $c) = post_callv2("tweets", $req);
 	my $postid = $data->{data}->{id};
@@ -347,7 +344,6 @@ if (defined($opt_p)) {
 		$req->{$var} = $val;
 	}
 	my ($data, $c) = post_callv2($call,$req);
-	save_rates($call, $c);
 	show_rates();
 	exit(0);
 }
@@ -355,8 +351,14 @@ sub post_callv2 {
 	my ($call,$req) = @_;
 	my $payload = { };
 	$payload->{"-to_json"} = $req;
+	if ($v>1) {
+		print "tweets payload = ".Dumper($payload);
+	}
 	my @res = tv2("post", $call, $payload);
-	print Dumper(@res);
+	save_rates($call, $c);
+	if ($v>0) {
+		print Dumper(@res);
+	}
 	return @res;
 }
 	
