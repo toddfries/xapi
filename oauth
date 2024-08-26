@@ -21,19 +21,19 @@ use utf8;
 use open qw/:std :utf8/;
 
 use Data::Dumper;
-use Twitter::API;
+use X::API;
 use ReadConf;
 
 my $rc = ReadConf->new();
-my $conf = $rc->readconf($ENV{HOME}."/.config/tapi/tapi.conf");
+my $conf = $rc->readconf($ENV{HOME}."/.config/xapi/xapi.conf");
 
 my $c = $conf->{creds};
 
 if (!defined($c)) {
-	print "[creds] not found in tapi.conf\n";
+	print "[creds] not found in xapi.conf\n";
 }
 
-my $client = Twitter::API->new_with_traits(
+my $client = X::API->new_with_traits(
     traits          => 'Enchilada',
     # Net::Twitter example app credentials
     map(tr/A-Za-z/N-ZA-Mn-za-m/r, qw/
