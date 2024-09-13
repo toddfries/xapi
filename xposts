@@ -472,14 +472,61 @@ sub uinfo {
 	if (defined($uc)) {
 		return $uc;
 	}
-	my ($data, $c) = tv2("get", "users/me?user.fields=connection_status,created_at,description,entities,".
-		"id,location,most_recent_tweet_id,name,pinned_tweet_id,profile_banner_url,profile_image_url,".
-		"protected,public_metrics,receives_your_dm,subscription_type,url,username,verified,".
-		"verified_type,withheld&expansions=most_recent_tweet_id,pinned_tweet_id&".
-		"tweet.fields=attachments,author_id,card_uri,context_annotations,conversation_id,created_at,".
-		"edit_controls,edit_history_tweet_ids,entities,geo,id,in_reply_to_user_id,lang,note_tweet,".
-		"possibly_sensitive,public_metrics,referenced_tweets,reply_settings,scopes,source,text,".
-		"username,withheld", "users/me" );
+
+	my $ufields = "";
+	$ufields .= "connection_status,";
+	$ufields .= "created_at,";
+	$ufields .= "description,";
+	$ufields .= "entities,";
+	$ufields .= "id,";
+	$ufields .= "location,";
+	$ufields .= "most_recent_tweet_id,";
+	$ufields .= "name,";
+	$ufields .= "pinned_tweet_id,";
+	$ufields .= "profile_banner_url,";
+	$ufields .= "profile_image_url,";
+	$ufields .= "protected,";
+	$ufields .= "public_metrics,";
+	$ufields .= "receives_your_dm,";
+	$ufields .= "subscription_type,";
+	$ufields .= "url,";
+	$ufields .= "username,";
+	$ufields .= "verified,";
+	$ufields .= "verified_type,";
+	$ufields .= "withheld&expansions=most_recent_tweet_id,";
+	$ufields .= "pinned_tweet_id";
+
+	my $tfields = "";
+	$tfields .= "article,";
+	$tfields .= "attachments,";
+	$tfields .= "author_id,";
+	$tfields .= "card_uri,";
+	$tfields .= "context_annotations,";
+	$tfields .= "conversation_id,";
+	$tfields .= "created_at,";
+	$tfields .= "edit_controls,";
+	$tfields .= "edit_history_tweet_ids,";
+	$tfields .= "entities,";
+	$tfields .= "geo,";
+	$tfields .= "id,";
+	$tfields .= "in_reply_to_user_id,";
+	$tfields .= "lang,";
+	$tfields .= "non_public_metrics,";
+	$tfields .= "note_tweet,";
+	$tfields .= "organic_metrics,";
+	$tfields .= "possibly_sensitive,";
+	$tfields .= "promoted_metrics,";
+	$tfields .= "public_metrics,";
+	$tfields .= "referenced_tweets,";
+	$tfields .= "reply_settings,";
+	$tfields .= "scopes,";
+	$tfields .= "source,";
+	$tfields .= "text,";
+	$tfields .= "withheld";
+
+	my ($data, $c) = tv2("get", "users/me?".
+		"user.fields=$ufields&".
+		"tweet.fields=$tfields", "users/me" );
 	umcache_write($data->{data});
 	return $data->{data};
 }
