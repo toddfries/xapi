@@ -1510,7 +1510,9 @@ sub write_to_cache {
 		return;
 	}
 
-	print "Cache write $filename ($key)\n";
+	if (!defined($opt_q)) {
+		print "Cache write $filename ($key)\n";
+	}
 	open my $fh, '>', $filename or die "Could not open file '$filename': $!";
 	print $fh Storable::nfreeze($data);
 	close $fh;
@@ -1537,7 +1539,9 @@ sub read_from_cache {
 		#}
 		return undef;
 	}
-	print "Cache read $filename ($key)\n";
+	if (!defined($opt_q)) {
+		print "Cache read $filename ($key)\n";
+	}
 	local $/ = undef;  # Read the entire file at once
 	my $data = Storable::thaw(<$fh>);
 	close $fh;
