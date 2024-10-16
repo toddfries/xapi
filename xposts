@@ -32,12 +32,14 @@ use MIME::Base64;
 use Storable;
 use Digest::SHA1 qw(sha1_hex);
 use Graphics::Magick;
+use File::MMagic;
 
 my $ident = "Xposts";
 my $logopt = 'pid';
 my $facility = 'user';
 
 our $cachedir = $ENV{'HOME'}."/.cache/xposts";
+our $magic;
 mkdir($ENV{'HOME'}.".cache") if ! -d $ENV{'HOME'}."/.cache";
 mkdir($cachedir) if ! -d $cachedir;
 if (! -d $cachedir) {
@@ -81,7 +83,7 @@ $opt_r = 10;
 $opt_s = 0;
 $opt_v = 0;
 
-getopts('a:bc:d:j:lqp:r:su:vw:B:I:J:Q:ST:LNO:W:');
+getopts('a:bc:d:j:lp:qr:su:vw:B:I:J:Q:ST:LNO:W:');
 
 if (!defined($opt_I)) {
 	$opt_I = $opt_i;
@@ -237,10 +239,6 @@ if (defined($opt_a)) {
 		desc(@ARGV);
 		exit(0);
 	}
-	if ($opt_a eq "post") {
-		post(@ARGV);
-		exit(0);
-	}
 	if ($opt_a eq "uinfo") {
 		my $data = uinfo();
 		print Dumper($data);
@@ -305,6 +303,10 @@ if (defined($opt_w)) {
 	#print "uinfo: ".Dumper($uinfo);
 	# see json/uinfo.json
 
+	if ($v>0) {
+		print "POST v2 tweets .. payload: \n";
+		print Dumper($req);
+	}
 
 	my ($data, $c) = post_callv2("tweets", $req);
 	my $postid = $data->{data}->{id};
@@ -354,7 +356,7 @@ sub post_callv2 {
 	my ($call,$req) = @_;
 	my $payload = { };
 	$payload->{"-to_json"} = $req;
-	if ($v>1) {
+	if ($v>0) {
 		print "tweets payload = ".Dumper($payload);
 	}
 	my @res = tv2("post", $call, $payload);
@@ -1255,16 +1257,63 @@ sub file_to_mediaid {
 	write_to_cache($filesha, $data);
 	return $data;
 }
+sub write_magic {
+	my ($mfile) = @_;
+	open(I,'<','/etc/magic');
+	open(O,'>',$mfile);
+	while(<I>) {
+		next if /^#/;
+		next if /:(ext|mime|apple|strength)/i;
+		next if /(ustring|bequad)/;
+		print O $_;
+	}
+	close(I);
+	close(O);
+}
+sub check_vid_mime_type {
+	my ($file) = @_;
+
+	if (!defined $magic) {
+		my $mfile = "$cachedir/magic";
+		if (! -f $mfile) {
+			write_magic($mfile);
+		}
+		$magic = File::MMagic->new($mfile);
+	}
+	my $mime_type = $magic->checktype_filename($file);
+
+	if ($mime_type =~ /Macromedia Flash Video/) {
+		return 'application/x-shockwave-flash';
+	}
+	if ($mime_type =~ /MP4 Base Media/) {
+		return 'video/mp4';
+	}
+	if ($mime_type =~ /QuickTime movie/) {
+		return 'video/quicktime';
+	}
+	if ($mime_type =~ /Microsoft ASF/) {
+		return 'video/x-ms-asf';
+	}
+	if ($mime_type =~ /, AVI,/) {
+		return 'video/ms-video';
+	}
+	if ($mime_type =~ /MPEG sequence/) {
+		return 'video/mpeg';
+	}
+	diestat("unknown: ${mime_type}");
+}
 sub video_to_mediaid {
 	my ($file) = @_;
 
+	my $mtype = check_vid_mime_type($file);
+	printf "mtype = '%s'\n", $mtype;
 	my $chunk_size = 4 * 1024 * 1024; # 1mb, max 5mb
 	if (defined($opts->{chunksize})) {
 		$chunk_size = $opts->{chunksize};
 	}
 	my @stats = stat($file);
 	my $size = $stats[7];
-	my $cdata = chunk_init('video/mp4', $size);
+	my $cdata = chunk_init($mtype, $size);
 	#print "video_to_mediaid: init cdata ".Dumper($cdata);
 	#printf "video_to_mediaid(%s) media_key = '%s', media_id = '%s'\n", $file, $cdata->{media_key}, $cdata->{media_id};
 	my $expiration = time() + $cdata->{expires_after_secs} - 1;
@@ -1281,11 +1330,11 @@ sub video_to_mediaid {
 	}
 	close($fh);
 	$cdata = chunk_finalize($mid);
-	print "video_to_mediaid: finalize cdata ".Dumper($cdata);
 	chunk_check_status($cdata);
 	return $cdata;
 }
 
+# https://developer.x.com/en/docs/x-api/v1/media/upload-media/uploading-media/media-best-practices
 sub chunk_init {
 	my ($type, $size) = @_;
 	printf "chunk_init(%s, %d)\n", $type, $size;
@@ -1343,6 +1392,7 @@ sub chunk_finalize {
 		diestat("chunk_finalize: client1($query, { media_id => $mid }: $@");
 	}
 	save_rates("media/upload", $c);
+	#print "video_to_mediaid: finalize cdata ".Dumper($data);
 	return $data;
 }
 sub chunk_check_status {
@@ -1432,71 +1482,6 @@ sub set_alt_text {
 		print "media/metadata/create result:\n".Dumper($data);
 	}
 }
-sub post {
-	my ($msg) = @_;
-	my $req = {
-			tweet_text => $msg,
-	};
-	if (defined($opt_W)) {
-		my $reply = {
-			"in_reply_to_tweet_id" => $opt_W,
-		};
-		$req->{"reply"} = $reply;
-	}
-	if (defined($opt_R)) {
-		$req->{"reply_settings"} = $opt_R;
-	}
-	# $opt_I syntax:
-	# <img> = foo.jpg[="alternate text"]
-	# list = <img>[,<img>...]
-	# 
-	if (defined($opt_I)) {
-		my @ids;
-		my ($mdata, $mstr, $mid);
-		foreach my $img (split(/,/, $opt_I)) {
-			my ($f,$txt)=split(/=/,$img);
-			if ($f =~ /^[0-9]+$/) {
-				$mid = $f;
-			} else {
-				$mdata = file_to_mediaid( $f );
-				$mid = $mdata->{media_id};
-			}
-			$mstr = sprintf("%s", $mid);
-			#if ($v>0) {
-				printf " media_id %s from %s\n", $mstr, $f;
-			#}
-			push @ids, $mstr;
-			# XXX make conditional
-			if (defined($txt)) {
-				set_alt_text( $mid, $txt );
-			}
-		}
-		my $media = {
-			media_ids => [ @ids ],
-		};
-		$req->{media} = $media;
-	}
-	# $req->{for_super_followers_only} = "true";
-	# $req->{reply_settings} = "mentionedUsers";
-	# $req->{geo} = $geoobj; ?
-	# $req->{geo}->{place_id} = $geo_place_id;
-
-	my $payload = { };
-	$payload->{"-to_json"} = $req;
-
-	my $uname = uinfo()->{username};
-
-	if ($v>0) {
-		print "tweets payload = ".Dumper($payload);
-	}
-
-	($data, $c) = tv2("post", "tweets", $payload, "tweets");
-	my $postid = $data->{data}->{id};
-	my $txt = $data->{data}->{text};
-	print "https://x.com/${uname}/status/${postid} \"${txt}\"\n";
-	show_rates();
-	exit(0);
-}
 sub key_to_cache_filename {
 	my ($key) = @_;
 	my $filename = $cachedir."/".sha1_hex($key);
@@ -1545,6 +1530,8 @@ sub read_from_cache {
 	local $/ = undef;  # Read the entire file at once
 	my $data = Storable::thaw(<$fh>);
 	close $fh;
-	print "read_from_cache($key) success!\n";
+	if (!defined($opt_q)) {
+		print "read_from_cache($key) success!\n";
+	}
 	return $data;
 }
