@@ -1196,6 +1196,8 @@ sub file_to_mediaid {
 		'Portable Network Graphics' => 'image/png',
 		'GIF format'  => 'image/gif',
 		'CompuServe graphics interchange format' => 'image/gif',
+		'ASCII Text' => 'text/plain',
+		'Portable Document Format' => 'application/pdf',
 	};
 
 	# verified not supported
@@ -1282,24 +1284,21 @@ sub check_vid_mime_type {
 	}
 	my $mime_type = $magic->checktype_filename($file);
 
-	if ($mime_type =~ /Macromedia Flash Video/) {
-		return 'application/x-shockwave-flash';
+	my $mtypes = { 
+		'Macromedia Flash Video' => 'application/x-shockwave-flash',
+		'MP4 Base Media' => 'video/mp4',
+		'QuickTime movie' => 'video/quicktime',
+		'Microsoft ASF' => 'video/x-ms-asf',
+		', AVI,' => 'video/ms-video',
+		'MPEG sequence' => 'video/mpeg',
+		'WAVE audio' => 'audio/x-wav',
+	};
+	foreach my $m (keys %{$mtypes}) {
+		if ($mime_type =~ /${m}/) {
+			return $mtypes->{$m};
+		}
 	}
-	if ($mime_type =~ /MP4 Base Media/) {
-		return 'video/mp4';
-	}
-	if ($mime_type =~ /QuickTime movie/) {
-		return 'video/quicktime';
-	}
-	if ($mime_type =~ /Microsoft ASF/) {
-		return 'video/x-ms-asf';
-	}
-	if ($mime_type =~ /, AVI,/) {
-		return 'video/ms-video';
-	}
-	if ($mime_type =~ /MPEG sequence/) {
-		return 'video/mpeg';
-	}
+
 	diestat("unknown: ${mime_type}");
 }
 sub video_to_mediaid {
