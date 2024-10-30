@@ -1,0 +1,116 @@
+#!/bin/sh
+
+adduf() {
+	while [ "$1" ]
+	do
+		if [ "$uf" = "" ]; then
+			uf="user.fields=$1"
+		else
+			uf="$uf,$1"
+		fi
+		shift
+	done
+}
+addarg() {
+	while [ "$1" ]
+	do
+		if [ "$args" = "" ]; then
+			args="?$1"
+		else
+			args="$args&$1"
+		fi
+		shift
+	done
+}
+addexp() {
+	while [ "$1" ]
+	do
+		if [ "$exp" = "" ]; then
+			exp="expansions=$1"
+		else
+			exp="$exp,$1"
+		fi
+		shift
+	done
+}
+addtf() {
+	while [ "$1" ]
+	do
+		if [ "$tf" = "" ]; then
+			tf="tweet.fields=$1"
+		else
+			tf="$tf,$1"
+		fi
+		shift
+	done
+}
+
+uf=""
+adduf connection_status
+adduf created_at
+adduf description
+adduf entities
+adduf id
+adduf location
+adduf most_recent_tweet_id
+adduf name
+adduf pinned_tweet_id
+adduf profile_banner_url
+adduf profile_image_url
+adduf protected
+adduf public_metrics
+adduf receives_your_dm
+adduf subscription_type
+adduf url
+adduf username
+adduf verified
+adduf verified_type
+adduf withheld
+
+exp=""
+addexp most_recent_tweet_id
+addexp pinned_tweet_id
+
+tf=""
+addtf article
+addtf attachments
+addtf author_id
+addtf card_uri
+addtf context_annotations
+addtf conversation_id
+addtf created_at
+addtf display_text_range
+addtf edit_controls
+addtf edit_history_tweet_ids
+addtf entities
+addtf geo
+addtf id
+addtf in_reply_to_user_id
+addtf lang
+addtf media_metadata
+addtf non_public_metrics
+addtf note_tweet
+addtf organic_metrics
+addtf possibly_sensitive
+addtf promoted_metrics
+addtf public_metrics
+addtf referenced_tweets
+addtf reply_settings
+addtf scopes
+addtf source
+addtf text
+#addtf username
+addtf withheld
+
+args=""
+if [ "$uf" ]; then
+	addarg "$uf"
+fi
+if [ "$exp" ]; then
+	addarg "$exp"
+fi
+if [ "$tf" ]; then
+	addarg "$tf"
+fi
+
+perl ./xposts -j "users/me${args}"
