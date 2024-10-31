@@ -801,6 +801,7 @@ sub show_ustats {
 	# epansions=pinned_tweet_id
 	# user.fields=public_metrics,username,verified,verified_type,withheld,...
 	my $xtra="?user.fields=public_metrics,username,verified,verified_type,withheld,url,entities,location";
+	$xtra  .=",subscription_type";
 	my ($res,$c) = tv2("get","users/by/username/$handle$xtra","users/by/username/:handle");
 	if (!defined($res)) {
 		diestat("empty result querying $handle");
