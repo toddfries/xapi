@@ -166,7 +166,7 @@ if ($opt_s>0) {
 }
 
 if (defined($opt_j)) {
-	my ($data, $c) = tv2("get", $opt_j, $opt_j );
+	my ($data, $c) = xv2("get", $opt_j, $opt_j );
 	save_rates($opt_j, $c);
 	print Dumper($data);
 	show_rates();
@@ -203,10 +203,10 @@ if (defined($opt_T)) {
 		my ($tweets, $context);
 
 		#if ($t =~ /,/) {
-			($tweets, $context) = tv2("get","tweets?ids=${t}&$query");
+			($tweets, $context) = xv2("get","tweets?ids=${t}&$query");
 		#} else {
 		#	try {
-		#		($tweets, $context) = tv2("get","tweets/${t}?${query}");
+		#		($tweets, $context) = xv2("get","tweets/${t}?${query}");
 		#	}
 		#	catch {
 		#		print $_->http_request->as_string."\n";
@@ -325,7 +325,7 @@ if (defined($opt_B)) {
 	$payload->{"-to_json"} = $req;
 
 	my $uid = uinfo()->{id};
-	my @res = tv2("post", "users/$uid/bookmarks", $payload);
+	my @res = xv2("post", "users/$uid/bookmarks", $payload);
 	print Dumper(@res);
 	show_rates();
 	exit(0);
@@ -336,7 +336,7 @@ if (defined($opt_d)) {
 	my $req = { text => $msg };
 	my $payload = { };
 	$payload->{"-to_json"} = $req;
-	my @res = tv2("post", "dm_conversations/with/${uid}/messages", $payload);
+	my @res = xv2("post", "dm_conversations/with/${uid}/messages", $payload);
 	print Dumper(@res);
 	show_rates();
 	exit(0);
@@ -359,7 +359,7 @@ sub post_callv2 {
 	if ($v>0) {
 		print "tweets payload = ".Dumper($payload);
 	}
-	my @res = tv2("post", $call, $payload);
+	my @res = xv2("post", $call, $payload);
 	save_rates($call, $c);
 	if ($v>0) {
 		print Dumper(@res);
@@ -413,7 +413,7 @@ $tweetfields .= "referenced_tweets,";
 $tweetfields .= "in_reply_to_user_id,";
 $tweetfields .= "conversation_id";
 
-my ($tweets, $context) = tv2("get","users/${id}/tweets".
+my ($tweets, $context) = xv2("get","users/${id}/tweets".
 	"?${tweetfields}".
 	"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 	"&media.fields=url,variants,media_key,type".
@@ -526,7 +526,7 @@ sub uinfo {
 	$tfields .= "text,";
 	$tfields .= "withheld";
 
-	my ($data, $c) = tv2("get", "users/me?".
+	my ($data, $c) = xv2("get", "users/me?".
 		"user.fields=$ufields&".
 		"tweet.fields=$tfields", "users/me" );
 	umcache_write($data->{data});
@@ -543,7 +543,7 @@ sub getuser_byname {
 	}
 
 	# cache the who -> id somewhere persistent to reduce api calls
-	my ($res,$c) = tv2("get","users/by/username/$who","users/by/username/:username");
+	my ($res,$c) = xv2("get","users/by/username/$who","users/by/username/:username");
 	if (!defined($res)) {
 		diestat("empty result querying $who");
 	}
@@ -571,7 +571,7 @@ sub getuser_byid {
 		return $data;
 	}
 	my $c;
-	($data, $c) = tv2("get","users/${id}","users/:id");
+	($data, $c) = xv2("get","users/${id}","users/:id");
 	$data = $data->{data};
 
 	umcache_write($data);
@@ -621,7 +621,7 @@ sub expand_tweet {
 			my $pg = "";
 			my $ucount = 0;
 			while(1) {
-			    my ($likes,$c) = tv2("get","tweets/${tid}/liking_users".
+			    my ($likes,$c) = xv2("get","tweets/${tid}/liking_users".
 				"?max_results=100".
 				#"&expansions=pinned_tweet_id".
 				"&tweet.fields=conversation_id,entities,public_metrics".
@@ -684,7 +684,7 @@ sub expand_tweet {
 				$status = "? ";
 			}
 			if ($recurse > 0) {
-				my ($q,$c) = tv2("get","tweets".
+				my ($q,$c) = xv2("get","tweets".
 				    "?ids=".$ref->{id}.
 				    "&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 				    "&${tweetfields}".
@@ -802,7 +802,7 @@ sub show_ustats {
 	# user.fields=public_metrics,username,verified,verified_type,withheld,...
 	my $xtra="?user.fields=public_metrics,username,verified,verified_type,withheld,url,entities,location";
 	$xtra  .=",subscription_type";
-	my ($res,$c) = tv2("get","users/by/username/$handle$xtra","users/by/username/:handle");
+	my ($res,$c) = xv2("get","users/by/username/$handle$xtra","users/by/username/:handle");
 	if (!defined($res)) {
 		diestat("empty result querying $handle");
 	}
@@ -929,7 +929,7 @@ sub show_owned_lists {
 	my $id = $data->{id};
 
 
-	($data, $c) = tv2("get", "users/${id}/owned_lists", "users/:id/owned_lists");
+	($data, $c) = xv2("get", "users/${id}/owned_lists", "users/:id/owned_lists");
 	#print "owned lists: ", Dumper($data), "\n\n";
 	foreach my $d (@{ $data->{data} }) {
 		printf "%20d %s\n", $d->{id}, $d->{name};
@@ -942,7 +942,7 @@ sub show_bookmarks {
 
 	my $id = uinfo()->{id};
 	my $maxres=100;
-	($data, $c) = tv2("get", "users/${id}/bookmarks", "users/:id/bookmarks");
+	($data, $c) = xv2("get", "users/${id}/bookmarks", "users/:id/bookmarks");
 		# "?max_results=${maxres}&id=${id}");
 	print "bookmarks: ", Dumper($data), "\n\n";
 }
@@ -1040,7 +1040,7 @@ sub show_rates {
 	}
 }
 
-sub tv2 {
+sub xv2 {
 	my ($type, $query, $ratename, $tmp) = @_;
 	my $pdata;
 	if ($v>0) {
@@ -1077,7 +1077,7 @@ sub tv2 {
 			if (defined($data) && $v>0) {
 				print Dumper($data);
 			}
-			diestat("tv2($type,$query):\n$@");
+			diestat("xv2($type,$query):\n$@");
 		}
 		if (defined($ratename)) {
 			save_rates($ratename, $c);
@@ -1095,7 +1095,7 @@ sub tv2 {
 			print "c: ".Dumper($c);
 		}
 		if ($@) {
-			diestat("tv2($type,$query):\n$@");
+			diestat("xv2($type,$query):\n$@");
 		}
 		if (defined($ratename)) {
 			save_rates($ratename, $c);
@@ -1103,7 +1103,7 @@ sub tv2 {
 		return ($data, $c);
 	}
 			
-	diestat("tv2('${type}', $query): unhandled type");
+	diestat("xv2('${type}', $query): unhandled type");
 }
 sub tv1 {
 	my ($type, $query, $params) = @_;
@@ -1443,7 +1443,7 @@ sub like {
 		print "like payload = { ".Dumper($payload)." }\n";
 	}
 	my $uid = uinfo()->{id};
-	($data, $c) = tv2("post", "users/${uid}/likes", $payload, "likes");
+	($data, $c) = xv2("post", "users/${uid}/likes", $payload, "likes");
 	print Dumper($data);
 }
 sub desc {
