@@ -200,20 +200,20 @@ if (defined($opt_T)) {
 	#$query = "tweet.fields=lang,author_id,attachments,created_at,public_metrics&user.fields=created_at";
 	#$query = "tweet.fields=created_at&expansions=author_id&user.fields=created_at";
 	foreach my $t (split(/\s+,\s+/,$opt_T)) {
-		my ($tweets, $context);
+		my ($posts, $context);
 
 		#if ($t =~ /,/) {
-			($tweets, $context) = xv2("get","tweets?ids=${t}&$query");
+			($posts, $context) = xv2("get","tweets?ids=${t}&$query");
 		#} else {
 		#	try {
-		#		($tweets, $context) = xv2("get","tweets/${t}?${query}");
+		#		($posts, $context) = xv2("get","tweets/${t}?${query}");
 		#	}
 		#	catch {
 		#		print $_->http_request->as_string."\n";
 		#		print "x error code: ".$_->X_error_code."\n";
 		#	};
 		#}
-		print expand_tweet(0, $tweets);
+		print expand_tweet(0, $posts);
 	}
 	show_rates();
 	exit(0);
@@ -357,7 +357,7 @@ sub post_callv2 {
 	my $payload = { };
 	$payload->{"-to_json"} = $req;
 	if ($v>0) {
-		print "tweets payload = ".Dumper($payload);
+		print "$call payload = ".Dumper($payload);
 	}
 	my @res = xv2("post", $call, $payload);
 	save_rates($call, $c);
@@ -413,7 +413,7 @@ $tweetfields .= "referenced_tweets,";
 $tweetfields .= "in_reply_to_user_id,";
 $tweetfields .= "conversation_id";
 
-my ($tweets, $context) = xv2("get","users/${id}/tweets".
+my ($posts, $context) = xv2("get","users/${id}/tweets".
 	"?${tweetfields}".
 	"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 	"&media.fields=url,variants,media_key,type".
@@ -422,11 +422,11 @@ our $shown = 1;
 if ($v > 0) {
 	$shown = 0;
 }
-if (!defined($tweets)) {
+if (!defined($posts)) {
 	diestat("tweets for $id returned undef");
 }
 if (! defined($opt_q)) {
-	print expand_tweet(0, $tweets);
+	print expand_tweet(0, $posts);
 }
 
 show_rates();
@@ -591,7 +591,7 @@ sub getmedia_bykey {
 }
 
 sub expand_tweet {
-	my ($level, $tweets) = @_;
+	my ($level, $posts) = @_;
 
 	my $returnstr = "";
 
@@ -599,25 +599,25 @@ sub expand_tweet {
 	my $prestr = sprintf "%${spacecount}s", $level;
 
 	if ($v > 0) {
-		print "\n\ntweets: ".Dumper($tweets)."\n\n";
+		print "\n\nposts: ".Dumper($posts)."\n\n";
 	}
 
-	foreach my $user ( @{ $tweets->{includes}->{users} } ) {
+	foreach my $user ( @{ $posts->{includes}->{users} } ) {
 		if (defined(cache_read('u',$user->{id}))) {
 			next;
 		}
 		umcache_write($user);
 	}
-	foreach my $tweet ( @{ $tweets->{includes}->{tweets} } ) {
-		#diestat(" tweet: ". Dumper($tweet));
-		my $tid = $tweet->{id};
+	foreach my $post ( @{ $posts->{includes}->{tweets} } ) {
+		#diestat(" post: ". Dumper($post));
+		my $tid = $post->{id};
 
-		foreach my $var (%{ $tweet }) {
-			$pmemcache->{$tid}->{$var} = $tweet->{$var};
+		foreach my $var (%{ $post }) {
+			$pmemcache->{$tid}->{$var} = $post->{$var};
 		}
 
 		# 'public_metrics' => { 'like_count' => 0, 'quote_count' => 0, 'retweet_count' => 0, 'reply_count' => 2 },
-		if ($opt_l>0 && $tweet->{public_metrics}->{like_count} > 0 && !defined($pmemcache->{$tid}->{liking_users})) {
+		if ($opt_l>0 && $post->{public_metrics}->{like_count} > 0 && !defined($pmemcache->{$tid}->{liking_users})) {
 			my $pg = "";
 			my $ucount = 0;
 			while(1) {
@@ -643,7 +643,7 @@ sub expand_tweet {
 		}
 	}
 
-	foreach my $media ( @{ $tweets->{includes}->{media} } ) {
+	foreach my $media ( @{ $posts->{includes}->{media} } ) {
 		my $mkey = $media->{media_key};
 
 		foreach my $var (%{ $media }) {
@@ -655,16 +655,16 @@ sub expand_tweet {
 	}
 
 	my $tcount = 0;
-	foreach my $tweet ( @{ $tweets->{data} } ) {
+	foreach my $post ( @{ $posts->{data} } ) {
 		if ($tcount++ >= $opt_r) {
 			last;
 		}
-		my $tid = $tweet->{id};
-		my $username = getuser_byid($tweet->{author_id})->{username};
+		my $tid = $post->{id};
+		my $username = getuser_byid($post->{author_id})->{username};
 		my $status = "";
 		my $rstr = "";
 		my $text = "";
-		foreach my $ref ( @{ $tweet->{referenced_tweets} } ) {
+		foreach my $ref ( @{ $post->{referenced_tweets} } ) {
 			my $tstr = $ref->{type};
 			my $recurse = 0;
 			if ($ref->{type} eq "replied_to") {
@@ -702,17 +702,17 @@ sub expand_tweet {
 		if (length($rstr)>0) {
 			$rstr = ", $rstr";
 		}
-		my $ttext = $tweet->{text};
+		my $ttext = $post->{text};
 		$ttext =~ s/[\n\r\f]/ /sg;
 		$ttext =~ s/\s+/ /g;
 		$ttext =~ s/\&amp;/\&/g;
 
-		$returnstr .= sprintf "%s%25s \@%s %s%s (%d%s)\n", $prestr, $tweet->{created_at}, $username, $status, $ttext, $tid, $rstr;
+		$returnstr .= sprintf "%s%25s \@%s %s%s (%d%s)\n", $prestr, $post->{created_at}, $username, $status, $ttext, $tid, $rstr;
 		my ($plike, $prt, $preply, $pimp, $pquote) = (
-			$tweet->{public_metrics}->{like_count},
-			$tweet->{public_metrics}->{retweet_count},
-			$tweet->{public_metrics}->{impression_count},
-			$tweet->{public_metrics}->{quote_count},
+			$post->{public_metrics}->{like_count},
+			$post->{public_metrics}->{retweet_count},
+			$post->{public_metrics}->{impression_count},
+			$post->{public_metrics}->{quote_count},
 		);
 
 		if (!defined($plike)) {
@@ -732,10 +732,10 @@ sub expand_tweet {
 		}
 		$returnstr .= sprintf "%s%25s %d/%d/%d/%d = Like/RT/Imp/Quote count\n", $prestr, " ", $plike, $prt, $pimp, $pquote;
 
-		foreach my $media ( @{ $tweet->{includes}->{media} } ) {
+		foreach my $media ( @{ $post->{includes}->{media} } ) {
 			$returnstr .= expand_media($prestr, $media);
 		}
-		foreach my $mkey (@{ $tweet->{attachments}->{media_keys} }) {
+		foreach my $mkey (@{ $post->{attachments}->{media_keys} }) {
 			#print "\nmkey: $mkey\n";
 			if (!defined($mmemcache->{$mkey})) {
 				print "mmemcache EEXIST for $mkey\n";
@@ -754,7 +754,7 @@ sub expand_tweet {
 		}
 
 		$returnstr .= $text;
-		#$returnstr .= "${prestr} tweet dump: ".Dumper($tweet)."\n\n";
+		#$returnstr .= "${prestr} post dump: ".Dumper($post)."\n\n";
 	}
 
 	return $returnstr;
