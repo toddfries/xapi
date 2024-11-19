@@ -46,6 +46,9 @@ if (! -d $cachedir) {
 	die "Can't create $cachedir";
 }
 
+our $fields = { }; # ->{t} = tweet, ->{u} = user
+init_fields();
+
 our $opt_b; # shows bookmarks
 our $opt_c; # config file
 our $opt_j; # arbitrary v2 query to get json output
@@ -190,8 +193,8 @@ if ($opt_b>0) {
 
 if (defined($opt_T)) {
 	use Try::Tiny;
-	# tweet.fields [attachments,author_id,context_annotations,conversation_id,created_at,edit_controls,edit_history_tweet_ids,entities,geo,id,in_reply_to_user_id,lang,non_public_metrics,organic_metrics,possibly_sensitive,promoted_metrics,public_metrics,referenced_tweets,reply_settings,source,text,withheld]
-	my $query = "tweet.fields=withheld,geo,attachments,author_id,created_at,entities,public_metrics,context_annotations,conversation_id,lang,source,text,possibly_sensitive".
+	# The `expansions` query parameter value [foo] is not one of [author_id,referenced_tweets.id,referenced_tweets.id.author_id,entities.mentions.username,entities.note.mentions.username,attachments.poll_ids,attachments.media_keys,attachments.media_source_tweet,in_reply_to_user_id,geo.place_id,edit_history_tweet_ids,article.cover_media,article.media_entities]
+	my $query = "tweet.fields=".$fields->{t}.
 	"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 	# media_fields [alt_text,duration_ms,height,media_key,non_public_metrics,organic_metrics,preview_image_url,promoted_metrics,public_metrics,type,url,variants,width]
 	"&media.fields=url,variants,media_key,type,alt_text,duration_ms,public_metrics".
@@ -297,6 +300,9 @@ if (defined($opt_w)) {
 	# $req->{reply_settings} = "mentionedUsers";
 	# $req->{geo} = $geoobj; ?
 	# $req->{geo}->{place_id} = $geo_place_id;
+
+	# media | poll | quote
+	# $req->{poll} = $poll;
 
 	my $uinfo = uinfo();
 	my $uname = $uinfo->{username};
@@ -468,6 +474,63 @@ sub cache_write {
 	write_to_cache("${cname}.${var}", $val);
 }
 
+sub init_fields {
+	$fields = { };
+	$fields->{u} = "";
+	$fields->{u} .= "connection_status,";
+	$fields->{u} .= "created_at,";
+	$fields->{u} .= "description,";
+	$fields->{u} .= "entities,";
+	$fields->{u} .= "id,";
+	$fields->{u} .= "location,";
+	$fields->{u} .= "most_recent_tweet_id,";
+	$fields->{u} .= "name,";
+	$fields->{u} .= "pinned_tweet_id,";
+	$fields->{u} .= "profile_banner_url,";
+	$fields->{u} .= "profile_image_url,";
+	$fields->{u} .= "protected,";
+	$fields->{u} .= "public_metrics,";
+	$fields->{u} .= "receives_your_dm,";
+	$fields->{u} .= "subscription_type,";
+	$fields->{u} .= "url,";
+	$fields->{u} .= "username,";
+	$fields->{u} .= "verified,";
+	$fields->{u} .= "verified_type,";
+	$fields->{u} .= "withheld&expansions=most_recent_tweet_id,";
+	$fields->{u} .= "pinned_tweet_id";
+
+	$fields->{t} = "";
+	$fields->{t} .= "article,";
+	$fields->{t} .= "attachments,";
+	$fields->{t} .= "author_id,";
+	$fields->{t} .= "card_uri,";
+	$fields->{t} .= "context_annotations,";
+	$fields->{t} .= "conversation_id,";
+	$fields->{t} .= "created_at,";
+	$fields->{t} .= "display_text_range,";
+	$fields->{t} .= "edit_controls,";
+	$fields->{t} .= "edit_history_tweet_ids,";
+	$fields->{t} .= "entities,";
+	$fields->{t} .= "geo,";
+	$fields->{t} .= "id,";
+	$fields->{t} .= "in_reply_to_user_id,";
+	$fields->{t} .= "lang,";
+	$fields->{t} .= "media_metadata,";
+	$fields->{t} .= "note_tweet,";
+	$fields->{t} .= "possibly_sensitive,";
+	$fields->{t} .= "public_metrics,";
+	$fields->{t} .= "referenced_tweets,";
+	$fields->{t} .= "reply_settings,";
+	$fields->{t} .= "scopes,";
+	$fields->{t} .= "source,";
+	$fields->{t} .= "text,";
+	$fields->{t} .= "withheld";
+	# logic this for only my tweets
+	#$fields->{t} .= "promoted_metrics,";
+	#$fields->{t} .= "non_public_metrics,";
+	#$fields->{t} .= "organic_metrics,";
+}
+
 sub uinfo {
 	my $me = get_creds();
 	my $uc = cache_read('u',$me->{screen_name});
@@ -475,56 +538,9 @@ sub uinfo {
 		return $uc;
 	}
 
-	my $ufields = "";
-	$ufields .= "connection_status,";
-	$ufields .= "created_at,";
-	$ufields .= "description,";
-	$ufields .= "entities,";
-	$ufields .= "id,";
-	$ufields .= "location,";
-	$ufields .= "most_recent_tweet_id,";
-	$ufields .= "name,";
-	$ufields .= "pinned_tweet_id,";
-	$ufields .= "profile_banner_url,";
-	$ufields .= "profile_image_url,";
-	$ufields .= "protected,";
-	$ufields .= "public_metrics,";
-	$ufields .= "receives_your_dm,";
-	$ufields .= "subscription_type,";
-	$ufields .= "url,";
-	$ufields .= "username,";
-	$ufields .= "verified,";
-	$ufields .= "verified_type,";
-	$ufields .= "withheld&expansions=most_recent_tweet_id,";
-	$ufields .= "pinned_tweet_id";
+	my $ufields = $fields->{u};
 
-	my $tfields = "";
-	$tfields .= "article,";
-	$tfields .= "attachments,";
-	$tfields .= "author_id,";
-	$tfields .= "card_uri,";
-	$tfields .= "context_annotations,";
-	$tfields .= "conversation_id,";
-	$tfields .= "created_at,";
-	$tfields .= "edit_controls,";
-	$tfields .= "edit_history_tweet_ids,";
-	$tfields .= "entities,";
-	$tfields .= "geo,";
-	$tfields .= "id,";
-	$tfields .= "in_reply_to_user_id,";
-	$tfields .= "lang,";
-	$tfields .= "non_public_metrics,";
-	$tfields .= "note_tweet,";
-	$tfields .= "organic_metrics,";
-	$tfields .= "possibly_sensitive,";
-	$tfields .= "promoted_metrics,";
-	$tfields .= "public_metrics,";
-	$tfields .= "referenced_tweets,";
-	$tfields .= "reply_settings,";
-	$tfields .= "scopes,";
-	$tfields .= "source,";
-	$tfields .= "text,";
-	$tfields .= "withheld";
+	my $tfields = $fields->{t};
 
 	my ($data, $c) = xv2("get", "users/me?".
 		"user.fields=$ufields&".
