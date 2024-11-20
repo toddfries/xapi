@@ -176,7 +176,7 @@ if (defined($opt_j)) {
 	exit(0);
 }
 if (defined($opt_J)) {
-	my ($data, $c) = tv1("get", $opt_J, $opt_J );
+	my ($data, $c) = xv1("get", $opt_J, $opt_J );
 	save_rates("$opt_J", $c);
 	print Dumper($data);
 	show_rates();
@@ -865,7 +865,7 @@ sub get_creds {
 		$me_glob = $data;
 		return $me_glob;
 	}
-	my ($me_glob, $c) = tv1("get","account/verify_credentials");
+	my ($me_glob, $c) = xv1("get","account/verify_credentials");
 	save_rates("account/verify_credentials", $c);
 	if ($v>0) {
 		print "query=account/verify_credentials\n";
@@ -910,7 +910,7 @@ sub show_mystats {
 	}
 
 	# seems this is unlimited calls?
-	($data, $c) = tv1("get","account/settings");
+	($data, $c) = xv1("get","account/settings");
 	save_rates("account/settings", $c);
 	my $seen = { };
 	foreach my $v (('allow_contributor_request', 'allow_dms_from',
@@ -1121,7 +1121,7 @@ sub xv2 {
 			
 	diestat("xv2('${type}', $query): unhandled type");
 }
-sub tv1 {
+sub xv1 {
 	my ($type, $query, $params) = @_;
 	if ($v>0) {
 		print "query=${query}\n";
@@ -1140,12 +1140,12 @@ sub tv1 {
 		}
 		if ($@) {
 			if (defined($data)) {
-				print "tv1 data: ".Dumper($data);
+				print "xv1 data: ".Dumper($data);
 			}
 			if (defined($c)) {
-				print "tv1 c: ".Dumper($c);
+				print "xv1 c: ".Dumper($c);
 			}
-			diestat("tv1($type,$query): $@");
+			diestat("xv1($type,$query): $@");
 		}
 		if (defined($ratename)) {
 			save_rates($ratename, $c);
@@ -1164,19 +1164,19 @@ sub tv1 {
 		}
 		if ($@) {
 			if (defined($data)) {
-				print "tv1 data: ".Dumper($data);
+				print "xv1 data: ".Dumper($data);
 			}
 			if (defined($c)) {
-				print "tv1 c: ".Dumper($c);
+				print "xv1 c: ".Dumper($c);
 			}
-			diestat("tv1($type,$query): $@");
+			diestat("xv1($type,$query): $@");
 		}
 		if (defined($ratename)) {
 			save_rates($ratename, $c);
 		}
 		return ($data, $c);
 	}
-	diestat("tv1('${type}', $query): unhandled type");
+	diestat("xv1('${type}', $query): unhandled type");
 }
 
 sub wait_till {
@@ -1262,7 +1262,7 @@ sub file_to_mediaid {
 		($data, $c) = $client1->request(post => $query, $payload);
 	};
 	if ($@) {
-		diestat("tv1($query):\n$@");
+		diestat("xv1($query):\n$@");
 	}
 	save_rates("media/upload", $c);
 	#print "post.media.upload: data ".Dumper($data);
@@ -1487,7 +1487,7 @@ sub set_alt_text {
 		},
 	};
 	my $payload->{"-to_json"} = $params;
-	($data, $c) = tv1("post", "media/metadata/create", $payload,
+	($data, $c) = xv1("post", "media/metadata/create", $payload,
 		"media/metadata/create");
 	save_rates("media/metadata/create", $c);
 	#print "post.media.metadata.create: data ".Dumper($data);
