@@ -331,8 +331,8 @@ if (defined($opt_B)) {
 	$payload->{"-to_json"} = $req;
 
 	my $uid = uinfo()->{id};
-	my @res = xv2("post", "users/$uid/bookmarks", $payload);
-	print Dumper(@res);
+	my ($data, $c) = xv2("post", "users/$uid/bookmarks", $payload);
+	print Dumper(($data,$c));
 	show_rates();
 	exit(0);
 }
@@ -342,8 +342,8 @@ if (defined($opt_d)) {
 	my $req = { text => $msg };
 	my $payload = { };
 	$payload->{"-to_json"} = $req;
-	my @res = xv2("post", "dm_conversations/with/${uid}/messages", $payload);
-	print Dumper(@res);
+	my ($data,$c) = xv2("post", "dm_conversations/with/${uid}/messages", $payload);
+	print Dumper(($data,$c));
 	show_rates();
 	exit(0);
 }
@@ -365,12 +365,12 @@ sub post_callv2 {
 	if ($v>0) {
 		print "$call payload = ".Dumper($payload);
 	}
-	my @res = xv2("post", $call, $payload);
+	my ($data, $c) = xv2("post", $call, $payload);
 	save_rates($call, $c);
 	if ($v>0) {
-		print Dumper(@res);
+		print Dumper(($data,$c));
 	}
-	return @res;
+	return ($data,$c);
 }
 	
 
