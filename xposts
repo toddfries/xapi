@@ -973,6 +973,41 @@ sub save_rates {
 		printf "c is a %s\n", ref($c);
 		return;
 	}
+	my $lims = { };
+	if ($v>0) {
+		print STDERR "Headers:\n";
+	}
+	my $resp = $c->http_response;
+	foreach my $h ($resp->header_field_names) {
+		my $val = $resp->header($h);
+		if (! defined $val) {
+			next;
+		}
+		if ($h =~ /x-(.*)-(limit|remaining|reset)/i) {
+			my $lim = $1;
+			my $ltype = lc($2);
+			if ($v>0) {
+				printf STDERR "\t.. %s .. %s\n", $lim, $ltype;
+			}
+			$lims->{$lim}->{$ltype} = $val;
+		}
+		if ($v>0) {
+			printf STDERR "\t%s = '%s'\n", $h, $resp->header($h);
+		}
+	}
+	if ($v>0) {
+		print STDERR "\n";
+	}
+	printf STDERR "%s Limits:\n", $name;
+	my $tmpdate = Date::Manip::Date->new();
+	foreach my $lim (keys %{ $lims }) {
+		$tmpdate->parse($lims->{$lim}->{reset});
+		printf "\t lim %s = %s/%s @ %s\n", $lim,
+			$lims->{$lim}->{remaining},
+			$lims->{$lim}->{limit},
+			$tmpdate->printf("%Y%m%d %H:%M:%S");
+	}
+	print STDERR "\n";
 	my ($rl, $rlrem, $rlres) = (
 			$c->rate_limit,
 			$c->rate_limit_remaining,
