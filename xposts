@@ -946,7 +946,9 @@ sub show_owned_lists {
 
 
 	($data, $c) = xv2("get", "users/${id}/owned_lists", "users/:id/owned_lists");
-	#print "owned lists: ", Dumper($data), "\n\n";
+	if ($v>0) {
+		print "owned lists: ", Dumper($data), "\n\n";
+	}
 	foreach my $d (@{ $data->{data} }) {
 		printf "%20d %s\n", $d->{id}, $d->{name};
 	}
@@ -1001,7 +1003,7 @@ sub save_rates {
 	printf STDERR "%s Limits:\n", $name;
 	my $tmpdate = Date::Manip::Date->new();
 	foreach my $lim (keys %{ $lims }) {
-		$tmpdate->parse($lims->{$lim}->{reset});
+		$tmpdate->parse("epoch ".$lims->{$lim}->{reset});
 		printf "\t lim %s = %s/%s @ %s\n", $lim,
 			$lims->{$lim}->{remaining},
 			$lims->{$lim}->{limit},
