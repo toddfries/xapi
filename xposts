@@ -1004,7 +1004,7 @@ sub save_rates {
 	my $tmpdate = Date::Manip::Date->new();
 	foreach my $lim (keys %{ $lims }) {
 		$tmpdate->parse("epoch ".$lims->{$lim}->{reset});
-		printf "\t lim %s = %s/%s @ %s\n", $lim,
+		printf "%s.%s = %s/%s @ %s\n", $name, $lim,
 			$lims->{$lim}->{remaining},
 			$lims->{$lim}->{limit},
 			$tmpdate->printf("%Y%m%d %H:%M:%S");
