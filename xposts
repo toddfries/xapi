@@ -46,6 +46,14 @@ if (! -d $cachedir) {
 	die "Can't create $cachedir";
 }
 
+# XXX crude global hack, think of a better solution!
+#   .. the problem is if I call eval { function; };
+#   .. and that function also calls eval { foo; };
+#   .. and that function also calls die
+#   .. the program actually dies
+#   .. want to see if tweet replies die, then query the community_id incase thats why
+our $skipeval = 0;
+
 our $fields = { }; # ->{t} = tweet, ->{u} = user
 init_fields();
 
@@ -68,6 +76,7 @@ our $opt_p; # arbitrary v2 query to post json output call;var1=val1;var2=val2
 our $opt_w; # write a post, $opt_w is message
 our $opt_Q; #  post quote id (post id to quote)
 our $opt_R; #  post reply_settings { "mentionedUsers", "followers", "everyone", "" }
+our $opt_C; #  post community_id
 our $opt_W; #  post reply id (post id to reply to)
 our $opt_I; #  post image filename
 our $opt_i; #  post image filename
@@ -205,17 +214,7 @@ if (defined($opt_T)) {
 	foreach my $t (split(/\s+,\s+/,$opt_T)) {
 		my ($posts, $context);
 
-		#if ($t =~ /,/) {
-			($posts, $context) = xv2("get","tweets?ids=${t}&$query");
-		#} else {
-		#	try {
-		#		($posts, $context) = xv2("get","tweets/${t}?${query}");
-		#	}
-		#	catch {
-		#		print $_->http_request->as_string."\n";
-		#		print "x error code: ".$_->X_error_code."\n";
-		#	};
-		#}
+		($posts, $context) = xv2("get","tweets?ids=${t}&$query");
 		print expand_tweet(0, $posts);
 	}
 	show_rates();
@@ -263,6 +262,9 @@ if (defined($opt_w)) {
 	} elsif (defined($opt_Q)) {
 		$req->{"quote_tweet_id"} = $opt_Q;
 	}
+	if (defined($opt_C)) {
+		$req->{"community_id"} = $opt_C;
+	}
 	if (defined($opt_R)) {
 		$req->{"reply_settings"} = $opt_R;
 	}
@@ -309,12 +311,38 @@ if (defined($opt_w)) {
 	#print "uinfo: ".Dumper($uinfo);
 	# see json/uinfo.json
 
+	tweet_retry:
 	if ($v>0) {
 		print "POST v2 tweets .. payload: \n";
 		print Dumper($req);
 	}
 
-	my ($data, $c) = post_callv2("tweets", $req);
+	my ($data, $c, $checkpost);
+	$skipeval = 1; # for nested eval skip below
+	eval {
+		($data, $c) = post_callv2("tweets", $req);
+	};
+	$skipeval = 0; # undo skip for other calls
+	if ($@) {
+		if (!defined $req->{"community_id"}) {
+			$checkpost = $opt_W;
+		}
+		if (!defined $checkpost) {
+			die "post_callv2(tweets, ...): $@";
+		}
+	}
+	if (defined $checkpost) {
+		my $call = "tweets/${checkpost}?tweet.fields=community_id";
+		($data, $c) = xv2("get", $call, $call);
+		my $cid = $data->{data}->{community_id};
+		if (!defined $cid) {
+			print "Check post $checkpost returned:\n";
+			print Dumper($data);
+			exit(1);
+		}
+		$req->{"community_id"} = $cid;
+		goto tweet_retry;
+	}
 	my $postid = $data->{data}->{id};
 	my $txt = $data->{data}->{text};
 	print "https://x.com/${uname}/status/${postid} \"${txt}\"\n";
@@ -505,6 +533,7 @@ sub init_fields {
 	$fields->{t} .= "author_id,";
 	$fields->{t} .= "card_uri,";
 	$fields->{t} .= "context_annotations,";
+	$fields->{t} .= "community_id,";
 	$fields->{t} .= "conversation_id,";
 	$fields->{t} .= "created_at,";
 	$fields->{t} .= "display_text_range,";
@@ -968,6 +997,9 @@ sub show_bookmarks {
 sub save_rates {
 	my ($name, $c) = @_;
 
+	$name =~ s/\?.*$//;
+	$name =~ s/\/[0-9]{1,}/\/:id/;
+
 	if (!defined($c) || length(ref($c)) < 1) {
 		return;
 	}
@@ -1004,7 +1036,7 @@ sub save_rates {
 	my $tmpdate = Date::Manip::Date->new();
 	foreach my $lim (keys %{ $lims }) {
 		$tmpdate->parse("epoch ".$lims->{$lim}->{reset});
-		printf "%s.%s = %s/%s @ %s\n", $name, $lim,
+		printf "%s.%s = {%s, /%s, %s}\n", $name, $lim,
 			$lims->{$lim}->{remaining},
 			$lims->{$lim}->{limit},
 			$tmpdate->printf("%Y%m%d %H:%M:%S");
@@ -1105,11 +1137,16 @@ sub xv2 {
 	}
 	my ($data, $c);
 
+	# try to pace
 	if (defined($ratename)) {
 		my $rem = $smemcache->{$ratename}->{last}->{rlrem};
 		my $res = $smemcache->{$ratename}->{last}->{rlres};
-		if (defined($rem) && defined($res) && $rem < 5) {
-			wait_till($res);
+		if (defined($rem) && defined($res)) {
+			if ($rem < 1) {
+				wait_till($res);
+			} else {
+				wait_till($res/2);
+			}
 		}
 	}
 
@@ -1138,11 +1175,15 @@ sub xv2 {
 		return ($data, $c);
 	}
 	if ($type eq "post") {
-		eval {
-			($data, $c) = $client2->post($query, 
-				$pdata
-			);
-		};
+		if ($skipeval > 0) {
+			($data, $c) = $client2->post($query, $pdata);
+		} else {
+			eval {
+				($data, $c) = $client2->post($query, 
+					$pdata
+				);
+			};
+		}
 		if ($v>0) {
 			print "data: ".Dumper($data);
 			print "c: ".Dumper($c);
