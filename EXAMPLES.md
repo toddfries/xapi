@@ -18,7 +18,7 @@ xposts -j users/by/username/elonmusk
 # arbitrary v1 get
 xposts -J account/verify_credentials
 
-# -r 5 # 5 tweets in results
+# -r 5 # 5 posts in results
 # -l 1 # 0 = no like data, 1 = like data
 
 # show a single users stats
@@ -29,7 +29,7 @@ xposts -s unix2mars
 xposts -S unix2mars elonmusk
 
 # show lists of a user
-xposts -L scobelizer
+xposts -L Scobleizer
 
 # arbitrary v2 post
 xposts -p "dm_conversations/with/218538224/messages;text=HelloWorld"
@@ -40,7 +40,7 @@ xposts -B :postid
 # show a singular post
 # free, 1/15m
 xposts -T :postid
-xposts -j "tweets/1732923352?tweet.fields=community_id"
+xposts -j "posts/1732923352?tweet.fields=community_id"
 
 # show followers
 xposts -j "users/218538224/followers?user.fields=id,location,public_metrics,subscription_type,verified,verified_type&tweet.fields=id,media_metadata,organic_metrics,public_metrics,scopes,source"
