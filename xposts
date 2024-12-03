@@ -347,11 +347,14 @@ if (defined($opt_w)) {
 		($data, $c) = xv2("get", $call);
 		my $cid = $data->{data}->{community_id};
 		if (!defined $cid) {
-			print "Check post $checkpost returned:\n";
-			print Dumper($data);
-			exit(1);
+			printf "No cid for $checkpost\n";
+			sleep(1);
+			#print "Check post $checkpost returned:\n";
+			#print Dumper($data);
+			#exit(1);
+		} else {
+			$req->{"community_id"} = $cid;
 		}
-		$req->{"community_id"} = $cid;
 		goto retrypost;
 	}
 	my $postid = $data->{data}->{id};
@@ -859,7 +862,7 @@ sub show_ustats {
 	$xtra  .=",subscription_type";
 	my $data = getuser_byname($handle);
 	my $id = $data->{id};
-	my ($res,$c) = xv2("get","users/$id$xtra","users/:id");
+	my ($res,$c) = xv2("get","users/$id$xtra");
 	if (!defined($res)) {
 		diestat("empty result querying $handle");
 	}
@@ -984,7 +987,7 @@ sub show_owned_lists {
 	my $id = $data->{id};
 
 
-	($data, $c) = xv2("get", "users/${id}/owned_lists", "users/:id/owned_lists");
+	($data, $c) = xv2("get", "users/${id}/owned_lists");
 	if ($v>0) {
 		print "owned lists: ", Dumper($data), "\n\n";
 	}
@@ -999,7 +1002,7 @@ sub show_bookmarks {
 
 	my $id = uinfo()->{id};
 	my $maxres=100;
-	($data, $c) = xv2("get", "users/${id}/bookmarks", "users/:id/bookmarks");
+	($data, $c) = xv2("get", "users/${id}/bookmarks");
 		# "?max_results=${maxres}&id=${id}");
 	print "bookmarks: ", Dumper($data), "\n\n";
 }
@@ -1073,7 +1076,7 @@ sub _call {
 			$lims = parse_limits($c);
 			my $name = $query;
 			$name =~ s/\?.*$//;
-			$name =~ s/\/[0-9]{1,}/:id/;
+			$name =~ s/\/[0-9]{1,}/\/:id/;
 			show_limits($name, $lims);
 		}
 		if ($@) {
@@ -1138,6 +1141,7 @@ sub wait_till {
 	my $res = strftime( "%s", localtime($reset));
 	my $rhu = strftime( "%Y%m%d %H:%M:%S", localtime($reset));
 	if ($res <= $now) {
+		printf STDERR "wait_till(%s) <= %s, returning\n";
 		return;
 	}
 	printf STDERR "\nwait_till waiting %ds until %s", $res - $now, $rhu;
