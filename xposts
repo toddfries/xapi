@@ -847,7 +847,9 @@ sub show_ustats {
 	# user.fields=public_metrics,username,verified,verified_type,withheld,...
 	my $xtra="?user.fields=public_metrics,username,verified,verified_type,withheld,url,entities,location";
 	$xtra  .=",subscription_type";
-	my ($res,$c) = xv2("get","users/by/username/$handle$xtra","users/by/username/:handle");
+	my $data = getuser_byname($handle);
+	my $id = $data->{id};
+	my ($res,$c) = xv2("get","users/$id$xtra","users/:id");
 	if (!defined($res)) {
 		diestat("empty result querying $handle");
 	}
@@ -897,7 +899,7 @@ sub get_creds {
 	my ($me_glob, $c) = xv1("get","account/verify_credentials");
 	save_rates("account/verify_credentials", $c);
 	if ($v>0) {
-		print "query=account/verify_credentials\n";
+		print "v1 get query=account/verify_credentials\n";
 	}
 	write_to_cache($ck, $me_glob);
 	return $me_glob;
@@ -1007,31 +1009,7 @@ sub save_rates {
 		printf "c is a %s\n", ref($c);
 		return;
 	}
-	my $lims = { };
-	if ($v>0) {
-		print STDERR "Headers:\n";
-	}
-	my $resp = $c->http_response;
-	foreach my $h ($resp->header_field_names) {
-		my $val = $resp->header($h);
-		if (! defined $val) {
-			next;
-		}
-		if ($h =~ /x-(.*)-(limit|remaining|reset)/i) {
-			my $lim = $1;
-			my $ltype = lc($2);
-			if ($v>0) {
-				printf STDERR "\t.. %s .. %s\n", $lim, $ltype;
-			}
-			$lims->{$lim}->{$ltype} = $val;
-		}
-		if ($v>0) {
-			printf STDERR "\t%s = '%s'\n", $h, $resp->header($h);
-		}
-	}
-	if ($v>0) {
-		print STDERR "\n";
-	}
+	my $lims = parse_limits( $c );
 	printf STDERR "%s Limits:\n", $name;
 	my $tmpdate = Date::Manip::Date->new();
 	foreach my $lim (keys %{ $lims }) {
@@ -1129,7 +1107,7 @@ sub xv2 {
 	my ($type, $query, $ratename, $tmp) = @_;
 	my $pdata;
 	if ($v>0) {
-		print "query=${query}\n";
+		print "v2 $type query=${query}\n";
 	}
 	if ($type eq "post") {
 		$pdata = $ratename;
@@ -1155,14 +1133,24 @@ sub xv2 {
 		eval {
 			($data, $c) = $client2->get($query);
 		};
+		my $lc = $client2->{_last_context};
 		if ($v>0) {
 			print "data: ".Dumper($data);
 			print "c: ".Dumper($c);
+			print "client->lastcontext: ".Dumper($lc)."\n";
+		}
+		if (!defined $c && defined $lc) {
+			$c = $lc;
 		}
 		if ($@) {
-			if (defined($c) && $c->rate_limit_remaining < 1) {
-				wait_till($c->rate_limit_reset);
-				goto retry;
+			if (defined $c) {
+				my $lims = parse_limits($c);
+				foreach my $lim (keys %{ $lims }) {
+					if ($lims->{$lim}->{remaining} < 1) {
+						wait_till($lims->{$lim}->{reset});
+						goto retry;
+					}
+				}
 			}
 			if (defined($data) && $v>0) {
 				print Dumper($data);
@@ -1185,8 +1173,9 @@ sub xv2 {
 			};
 		}
 		if ($v>0) {
-			print "data: ".Dumper($data);
-			print "c: ".Dumper($c);
+			print "data: ".Dumper($data)."\n";
+			print "c: ".Dumper($c)."\n";
+			print "client->lastcontext: ".Dumper($client2->{_last_context})."\n";
 		}
 		if ($@) {
 			diestat("xv2($type,$query):\n$@");
@@ -1202,7 +1191,7 @@ sub xv2 {
 sub xv1 {
 	my ($type, $query, $params) = @_;
 	if ($v>0) {
-		print "query=${query}\n";
+		print "v1 $type query=${query}\n";
 	}
 	my ($data, $c);
 	my $ratename = $query;
@@ -1260,12 +1249,13 @@ sub xv1 {
 sub wait_till {
 	my ($reset) = @_;
 
-	my $now = strftime( "%s", localtime);
+	my $now = strftime( "%s", localtime());
 	my $res = strftime( "%s", localtime($reset));
+	my $rhu = strftime( "%Y%m%d %H:%M:%S", localtime($reset));
 	if ($res <= $now) {
 		return;
 	}
-	printf STDERR "\nwait_till waiting %ds", $res - $now;
+	printf STDERR "\nwait_till waiting %ds until %s", $res - $now, $rhu;
 	sleep($res - $now); # should we +1 to not be too fast?
 	printf STDERR " done.\n";
 }
@@ -1628,4 +1618,34 @@ sub read_from_cache {
 		print "read_from_cache($key) success!\n";
 	}
 	return $data;
+}
+sub parse_limits {
+	my ($c) = @_;
+
+	my $lims = { };
+	if ($v>0) {
+		print STDERR "Headers:\n";
+	}
+	my $resp = $c->http_response;
+	foreach my $h ($resp->header_field_names) {
+		my $val = $resp->header($h);
+		if (! defined $val) {
+			next;
+		}
+		if ($h =~ /x-(.*)-(limit|remaining|reset)/i) {
+			my $lim = $1;
+			my $ltype = lc($2);
+			if ($v>0) {
+				printf STDERR "\t.. %s .. %s\n", $lim, $ltype;
+			}
+			$lims->{$lim}->{$ltype} = $val;
+		}
+		if ($v>0) {
+			printf STDERR "\t%s = '%s'\n", $h, $resp->header($h);
+		}
+	}
+	if ($v>0) {
+		print STDERR "\n";
+	}
+	return $lims;
 }
