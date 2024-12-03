@@ -310,23 +310,35 @@ if (defined($opt_w)) {
 	#print "uinfo: ".Dumper($uinfo);
 	# see json/uinfo.json
 
-	tweet_retry:
 	if ($v>0) {
 		print "POST v2 tweets .. payload: \n";
 		print Dumper($req);
 	}
-
+	retrypost:
 	my ($data, $c, $checkpost);
 	$skipeval = 1; # for nested eval skip below
 	eval {
 		($data, $c) = post_callv2("posts", $req);
 	};
 	$skipeval = 0; # undo skip for other calls
+	if (!defined $c) {
+		$c = $client->{2}->{_last_context};
+	}
 	if ($@) {
 		if (!defined $req->{"community_id"}) {
 			$checkpost = $opt_W;
 		}
 		if (!defined $checkpost) {
+			# XXX instead of this + skipeval, pass a function to the call eventually
+			if (defined $c) {
+				my $lims = parse_limits($c);
+				foreach my $lim (keys %{ $lims }) {
+					if ($lims->{$lim}->{remaining} < 1) {
+						wait_till($lims->{$lim}->{reset});
+						goto retrypost;
+					}
+				}
+			}
 			die "post_callv2(tweets, ...): $@";
 		}
 	}
@@ -340,7 +352,7 @@ if (defined($opt_w)) {
 			exit(1);
 		}
 		$req->{"community_id"} = $cid;
-		goto tweet_retry;
+		goto retrypost;
 	}
 	my $postid = $data->{data}->{id};
 	my $txt = $data->{data}->{text};
