@@ -138,7 +138,8 @@ if (! -d $cachedir) {
 
 our $me_glob;
 
-our $client1 = X::API->new_with_traits(
+our $client = { };
+$client->{1} = X::API->new_with_traits(
 	#api_version => '1',
 	#api_ext	=> '',
 	traits => [ qw/ApiMethods/ ],
@@ -149,8 +150,8 @@ our $client1 = X::API->new_with_traits(
 	access_token	=> $c->{access_token},
 	access_token_secret => $c->{access_token_secret},
 );
-#print Dumper($client1);
-our $client2 = X::API->new_with_traits(
+#print Dumper($client->{1});
+$client->{2} = X::API->new_with_traits(
 	api_version => '2',
 	api_ext	=> '',
 	traits => [ qw/ApiMethods/ ],
@@ -160,7 +161,7 @@ our $client2 = X::API->new_with_traits(
 	access_token	=> $c->{access_token},
 	access_token_secret => $c->{access_token_secret},
 );
-#print Dumper($client2);
+#print Dumper($client->{2});
 
 our $gc = { }; # Global Cache
 our $pmemcache = { }; # posts
@@ -1005,10 +1006,22 @@ sub show_rates {
 	}
 }
 
+sub xv1 {
+	my ($type, $query, $pdata) = @_;
+
+	return _call(1, $type, $query, $pdata);
+}
+
 sub xv2 {
 	my ($type, $query, $pdata) = @_;
+
+	return _call(2, $type, $query, $pdata);
+}
+
+sub _call {
+	my ($ver, $type, $query, $pdata) = @_;
 	if ($v>0) {
-		print "v2 $type query=${query}\n";
+		print "v$ver $type query=${query}\n";
 	}
 	my ($data, $c);
 
@@ -1030,9 +1043,9 @@ sub xv2 {
 	retry:
 	if ($type eq "get") {
 		eval {
-			($data, $c) = $client2->get($query);
+			($data, $c) = $client->{$ver}->get($query);
 		};
-		my $lc = $client2->{_last_context};
+		my $lc = $client->{$ver}->{_last_context};
 		if ($v>0) {
 			print "data: ".Dumper($data);
 			print "c: ".Dumper($c);
@@ -1054,16 +1067,16 @@ sub xv2 {
 			if (defined($data) && $v>0) {
 				print Dumper($data);
 			}
-			diestat("xv2($type,$query):\n$@");
+			diestat("_call($ver,$type,$query):\n$@");
 		}
 		return ($data, $c);
 	}
 	if ($type eq "post") {
 		if ($skipeval > 0) {
-			($data, $c) = $client2->post($query, $pdata);
+			($data, $c) = $client->{$ver}->post($query, $pdata);
 		} else {
 			eval {
-				($data, $c) = $client2->post($query, 
+				($data, $c) = $client->{$ver}->post($query, 
 					$pdata
 				);
 			};
@@ -1071,66 +1084,15 @@ sub xv2 {
 		if ($v>0) {
 			print "data: ".Dumper($data)."\n";
 			print "c: ".Dumper($c)."\n";
-			print "client->lastcontext: ".Dumper($client2->{_last_context})."\n";
+			print "client->lastcontext: ".Dumper($client->{$ver}->{_last_context})."\n";
 		}
 		if ($@) {
-			diestat("xv2($type,$query):\n$@");
+			diestat("_call($ver,$type,$query):\n$@");
 		}
 		return ($data, $c);
 	}
 			
-	diestat("xv2('${type}', $query): unhandled type");
-}
-sub xv1 {
-	my ($type, $query, $params) = @_;
-	if ($v>0) {
-		print "v1 $type query=${query}\n";
-	}
-	my ($data, $c);
-	my $ratename = $query;
-	$ratename=~ s/\?.*$//g;
-
-	if ($type eq "get") {
-		eval {
-			($data, $c) = $client1->get($query);
-		};
-		if ($v>0) {
-			print "data: ".Dumper($data);
-			print "c: ".Dumper($c);
-		}
-		if ($@) {
-			if (defined($data)) {
-				print "xv1 data: ".Dumper($data);
-			}
-			if (defined($c)) {
-				print "xv1 c: ".Dumper($c);
-			}
-			diestat("xv1($type,$query): $@");
-		}
-		return ($data, $c);
-	}
-	if ($type eq "post") {
-		eval {
-			($data, $c) = $client1->post($query, $params);
-		};
-		if ($v>0) {
-			print "data: ".Dumper($data);
-			if ($v>1) {
-				print "c: ".Dumper($c);
-			}
-		}
-		if ($@) {
-			if (defined($data)) {
-				print "xv1 data: ".Dumper($data);
-			}
-			if (defined($c)) {
-				print "xv1 c: ".Dumper($c);
-			}
-			diestat("xv1($type,$query): $@");
-		}
-		return ($data, $c);
-	}
-	diestat("xv1('${type}', $query): unhandled type");
+	diestat("_call($ver, '${type}', $query): unhandled type");
 }
 
 sub wait_till {
@@ -1212,9 +1174,9 @@ sub file_to_mediaid {
 	if ($v>1) {
 		print "payload: ".Dumper($payload);
 	}
-	my $query = $client1->upload_url_for('media/upload');
+	my $query = $client->{1}->upload_url_for('media/upload');
 	eval {
-		($data, $c) = $client1->request(post => $query, $payload);
+		($data, $c) = $client->{1}->request(post => $query, $payload);
 	};
 	if ($@) {
 		diestat("xv1($query):\n$@");
@@ -1315,12 +1277,12 @@ sub chunk_init {
 	$payload->{'media_category'} = 'tweet_video';
 	$payload->{'total_bytes'} = $size;
 
-	my $query = $client1->upload_url_for('media/upload');
+	my $query = $client->{1}->upload_url_for('media/upload');
 	eval {
-		($data, $c) = $client1->request(post => $query, $payload);
+		($data, $c) = $client->{1}->request(post => $query, $payload);
 	};
 	if ($@) {
-		diestat("chunk_init: client1($query, { media_type => $type, total_bytes => $size }: $@");
+		diestat("chunk_init: client->{1}($query, { media_type => $type, total_bytes => $size }: $@");
 	}
 	return $data;
 }
@@ -1335,12 +1297,12 @@ sub chunk_append {
 	$payload->{'media_data'} = encode_base64($chunk);
 
 
-	my $query = $client1->upload_url_for('media/upload');
+	my $query = $client->{1}->upload_url_for('media/upload');
 	eval {
-		($data, $c) = $client1->request(post => $query, $payload);
+		($data, $c) = $client->{1}->request(post => $query, $payload);
 	};
 	if ($@) {
-		diestat("chunk_append: client1($query, { media_id => $mid, segment_index => ${chunk_num} }: $@");
+		diestat("chunk_append: client->{1}($query, { media_id => $mid, segment_index => ${chunk_num} }: $@");
 	}
 	return $data;
 }
@@ -1352,12 +1314,12 @@ sub chunk_finalize {
 	$payload->{'command'} = "FINALIZE";
 	$payload->{'media_id'} = $mid;
 
-	my $query = $client1->upload_url_for('media/upload');
+	my $query = $client->{1}->upload_url_for('media/upload');
 	eval {
-		($data, $c) = $client1->request(post => $query, $payload);
+		($data, $c) = $client->{1}->request(post => $query, $payload);
 	};
 	if ($@) {
-		diestat("chunk_finalize: client1($query, { media_id => $mid }: $@");
+		diestat("chunk_finalize: client->{1}($query, { media_id => $mid }: $@");
 	}
 	#print "video_to_mediaid: finalize cdata ".Dumper($data);
 	return $data;
@@ -1371,7 +1333,7 @@ sub chunk_check_status {
 		print "chunk_check_status no pi? dumping data: ".Dumper($data);
 		return;
 	}
-	my $query = $client1->upload_url_for('media/upload');
+	my $query = $client->{1}->upload_url_for('media/upload');
 	while (1)
 	{
 		printf "chunk_check_status: %s, sleep %ds\n", $pi->{state}, $pi->{'check_after_secs'};
@@ -1381,7 +1343,7 @@ sub chunk_check_status {
 		$payload->{'media_id'} = $data->{media_id};
 
 		eval {
-			($data, $c) = $client1->request(get => $query, $payload);
+			($data, $c) = $client->{1}->request(get => $query, $payload);
 		};
 		if ($@) {
 			my $msg = sprintf("chunk_check_status: state=%s, check_after_secs=%s: $@\n",
