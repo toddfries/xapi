@@ -324,6 +324,10 @@ if (defined($opt_w)) {
 	if (!defined $c) {
 		$c = $client->{2}->{_last_context};
 	}
+	my $lims;
+	if (defined $c) {
+		$lims = parse_limits($c);
+	}
 	if ($@) {
 		if (!defined $req->{"community_id"}) {
 			$checkpost = $opt_W;
@@ -331,12 +335,8 @@ if (defined($opt_w)) {
 		if (!defined $checkpost) {
 			# XXX instead of this + skipeval, pass a function to the call eventually
 			if (defined $c) {
-				my $lims = parse_limits($c);
-				foreach my $lim (keys %{ $lims }) {
-					if ($lims->{$lim}->{remaining} < 1) {
-						wait_till($lims->{$lim}->{reset});
-						goto retrypost;
-					}
+				if (check_limits($lims)) {
+					goto retrypost;
 				}
 			}
 			die "post_callv2(tweets, ...): $@";
@@ -1021,13 +1021,15 @@ sub show_rates {
 sub xv1 {
 	my ($type, $query, $pdata) = @_;
 
-	return _call(1, $type, $query, $pdata);
+	my ($data, $c) = _call(1, $type, $query, $pdata);
+	return ($data, $c);
 }
 
 sub xv2 {
 	my ($type, $query, $pdata) = @_;
 
-	return _call(2, $type, $query, $pdata);
+	my ($data, $c) = _call(2, $type, $query, $pdata);
+	return ($data, $c);
 }
 
 sub _call {
@@ -1052,8 +1054,8 @@ sub _call {
 		}
 	}
 
-	retry:
 	if ($type eq "get") {
+		_retry_get:
 		eval {
 			($data, $c) = $client->{$ver}->get($query);
 		};
@@ -1066,14 +1068,18 @@ sub _call {
 		if (!defined $c && defined $lc) {
 			$c = $lc;
 		}
+		my $lims;
+		if (defined $c) {
+			$lims = parse_limits($c);
+			my $name = $query;
+			$name =~ s/\?.*$//;
+			$name =~ s/\/[0-9]{1,}/:id/;
+			show_limits($name, $lims);
+		}
 		if ($@) {
 			if (defined $c) {
-				my $lims = parse_limits($c);
-				foreach my $lim (keys %{ $lims }) {
-					if ($lims->{$lim}->{remaining} < 1) {
-						wait_till($lims->{$lim}->{reset});
-						goto retry;
-					}
+				if (check_limits($lims)) {
+					goto _retry_get;
 				}
 			}
 			if (defined($data) && $v>0) {
@@ -1084,6 +1090,7 @@ sub _call {
 		return ($data, $c);
 	}
 	if ($type eq "post") {
+		_retry_post:
 		if ($skipeval > 0) {
 			($data, $c) = $client->{$ver}->post($query, $pdata);
 		} else {
@@ -1093,12 +1100,29 @@ sub _call {
 				);
 			};
 		}
+		my $lc = $client->{$ver}->{_last_context};
 		if ($v>0) {
 			print "data: ".Dumper($data)."\n";
 			print "c: ".Dumper($c)."\n";
 			print "client->lastcontext: ".Dumper($client->{$ver}->{_last_context})."\n";
 		}
+		if (!defined $c && defined $lc) {
+			$c = $lc;
+		}
+		my $lims;
+		if (defined $c) {
+			$lims = parse_limits($c);
+			my $name = $query;
+			$name =~ s/\?.*$//;
+			$name =~ s/\/[0-9]{1,}/:id/;
+			show_limits($name, $lims);
+		}
 		if ($@) {
+			if (defined $c) {
+				if (check_limits($lims)) {
+					goto _retry_post;
+				}
+			}
 			diestat("_call($ver,$type,$query):\n$@");
 		}
 		return ($data, $c);
@@ -1503,4 +1527,26 @@ sub parse_limits {
 		print STDERR "\n";
 	}
 	return $lims;
+}
+sub check_limits {
+	my ($lims) = @_;
+	foreach my $lim (keys %{ $lims }) {
+		if ($lims->{$lim}->{remaining} < 1) {
+			wait_till($lims->{$lim}->{reset});
+			return 1;
+		}
+	}
+	return 0;
+}
+sub show_limits {
+	my ($name, $lims) = @_;
+	my $timestamp = Date::Manip::Date->new();
+
+	foreach my $lim (keys %{ $lims }) {
+		$timestamp->parse("epoch ".$lims->{$lim}->{reset});
+		printf "  %s.%s = {%d/%d, %s}\n", $name, $lim,
+			$lims->{$lim}->{remaining},
+			$lims->{$lim}->{limit},
+			$timestamp->printf("%Y%m%d %H:%M:%S");
+	}
 }
