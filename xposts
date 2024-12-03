@@ -51,7 +51,7 @@ if (! -d $cachedir) {
 #   .. and that function also calls eval { foo; };
 #   .. and that function also calls die
 #   .. the program actually dies
-#   .. want to see if tweet replies die, then query the community_id incase thats why
+#   .. want to see if post replies die, then query the community_id incase thats why
 our $skipeval = 0;
 
 our $fields = { }; # ->{t} = tweet, ->{u} = user
@@ -214,7 +214,7 @@ if (defined($opt_T)) {
 	foreach my $t (split(/\s+,\s+/,$opt_T)) {
 		my ($posts, $context);
 
-		($posts, $context) = xv2("get","tweets?ids=${t}&$query");
+		($posts, $context) = xv2("get","posts?ids=${t}&$query");
 		print expand_tweet(0, $posts);
 	}
 	show_rates();
@@ -320,7 +320,7 @@ if (defined($opt_w)) {
 	my ($data, $c, $checkpost);
 	$skipeval = 1; # for nested eval skip below
 	eval {
-		($data, $c) = post_callv2("tweets", $req);
+		($data, $c) = post_callv2("posts", $req);
 	};
 	$skipeval = 0; # undo skip for other calls
 	if ($@) {
@@ -332,7 +332,7 @@ if (defined($opt_w)) {
 		}
 	}
 	if (defined $checkpost) {
-		my $call = "tweets/${checkpost}?tweet.fields=community_id";
+		my $call = "posts/${checkpost}?tweet.fields=community_id";
 		($data, $c) = xv2("get", $call, $call);
 		my $cid = $data->{data}->{community_id};
 		if (!defined $cid) {
@@ -457,7 +457,7 @@ if ($v > 0) {
 	$shown = 0;
 }
 if (!defined($posts)) {
-	diestat("tweets for $id returned undef");
+	diestat("posts for $id returned undef");
 }
 if (! defined($opt_q)) {
 	print expand_tweet(0, $posts);
@@ -666,12 +666,12 @@ sub expand_tweet {
 			my $pg = "";
 			my $ucount = 0;
 			while(1) {
-			    my ($likes,$c) = xv2("get","tweets/${tid}/liking_users".
+			    my ($likes,$c) = xv2("get","posts/${tid}/liking_users".
 				"?max_results=100".
 				#"&expansions=pinned_tweet_id".
 				"&tweet.fields=conversation_id,entities,public_metrics".
 				"&user.fields=public_metrics".
-				$pg, "tweets/:id/liking_users",
+				$pg, "posts/:id/liking_users",
 			    );
 			    foreach my $user (@{ $likes->{data} }) {
 				$ucount++;
@@ -729,11 +729,11 @@ sub expand_tweet {
 				$status = "? ";
 			}
 			if ($recurse > 0) {
-				my ($q,$c) = xv2("get","tweets".
+				my ($q,$c) = xv2("get","posts".
 				    "?ids=".$ref->{id}.
 				    "&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 				    "&${tweetfields}".
-				    "&media.fields=url,variants,media_key,type","tweets",
+				    "&media.fields=url,variants,media_key,type","posts",
 				);
 				$text .= expand_tweet($level + 1, $q );
 			}
