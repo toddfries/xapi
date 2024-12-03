@@ -178,15 +178,13 @@ if ($opt_s>0) {
 }
 
 if (defined($opt_j)) {
-	my ($data, $c) = xv2("get", $opt_j, $opt_j );
-	save_rates($opt_j, $c);
+	my ($data, $c) = xv2("get", $opt_j );
 	print Dumper($data);
 	show_rates();
 	exit(0);
 }
 if (defined($opt_J)) {
-	my ($data, $c) = xv1("get", $opt_J, $opt_J );
-	save_rates("$opt_J", $c);
+	my ($data, $c) = xv1("get", $opt_J );
 	print Dumper($data);
 	show_rates();
 	exit(0);
@@ -333,7 +331,7 @@ if (defined($opt_w)) {
 	}
 	if (defined $checkpost) {
 		my $call = "posts/${checkpost}?tweet.fields=community_id";
-		($data, $c) = xv2("get", $call, $call);
+		($data, $c) = xv2("get", $call);
 		my $cid = $data->{data}->{community_id};
 		if (!defined $cid) {
 			print "Check post $checkpost returned:\n";
@@ -394,7 +392,6 @@ sub post_callv2 {
 		print "$call payload = ".Dumper($payload);
 	}
 	my ($data, $c) = xv2("post", $call, $payload);
-	save_rates($call, $c);
 	if ($v>0) {
 		print Dumper(($data,$c));
 	}
@@ -451,7 +448,7 @@ my ($posts, $context) = xv2("get","users/${id}/tweets".
 	"?${tweetfields}".
 	"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 	"&media.fields=url,variants,media_key,type".
-	"&max_results=${maxres}", "users/:id/tweets");
+	"&max_results=${maxres}");
 our $shown = 1;
 if ($v > 0) {
 	$shown = 0;
@@ -573,7 +570,7 @@ sub uinfo {
 
 	my ($data, $c) = xv2("get", "users/me?".
 		"user.fields=$ufields&".
-		"tweet.fields=$tfields", "users/me" );
+		"tweet.fields=$tfields");
 	umcache_write($data->{data});
 	return $data->{data};
 }
@@ -588,7 +585,7 @@ sub getuser_byname {
 	}
 
 	# cache the who -> id somewhere persistent to reduce api calls
-	my ($res,$c) = xv2("get","users/by/username/$who","users/by/username/:username");
+	my ($res,$c) = xv2("get","users/by/username/$who");
 	if (!defined($res)) {
 		diestat("empty result querying $who");
 	}
@@ -616,7 +613,7 @@ sub getuser_byid {
 		return $data;
 	}
 	my $c;
-	($data, $c) = xv2("get","users/${id}","users/:id");
+	($data, $c) = xv2("get","users/${id}");
 	$data = $data->{data};
 
 	umcache_write($data);
@@ -671,7 +668,7 @@ sub expand_tweet {
 				#"&expansions=pinned_tweet_id".
 				"&tweet.fields=conversation_id,entities,public_metrics".
 				"&user.fields=public_metrics".
-				$pg, "posts/:id/liking_users",
+				$pg
 			    );
 			    foreach my $user (@{ $likes->{data} }) {
 				$ucount++;
@@ -733,7 +730,7 @@ sub expand_tweet {
 				    "?ids=".$ref->{id}.
 				    "&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 				    "&${tweetfields}".
-				    "&media.fields=url,variants,media_key,type","posts",
+				    "&media.fields=url,variants,media_key,type"
 				);
 				$text .= expand_tweet($level + 1, $q );
 			}
@@ -897,7 +894,6 @@ sub get_creds {
 		return $me_glob;
 	}
 	my ($me_glob, $c) = xv1("get","account/verify_credentials");
-	save_rates("account/verify_credentials", $c);
 	if ($v>0) {
 		print "v1 get query=account/verify_credentials\n";
 	}
@@ -942,7 +938,6 @@ sub show_mystats {
 
 	# seems this is unlimited calls?
 	($data, $c) = xv1("get","account/settings");
-	save_rates("account/settings", $c);
 	my $seen = { };
 	foreach my $v (('allow_contributor_request', 'allow_dms_from',
 		'language')) {
@@ -996,73 +991,6 @@ sub show_bookmarks {
 	print "bookmarks: ", Dumper($data), "\n\n";
 }
 
-sub save_rates {
-	my ($name, $c) = @_;
-
-	$name =~ s/\?.*$//;
-	$name =~ s/\/[0-9]{1,}/\/:id/;
-
-	if (!defined($c) || length(ref($c)) < 1) {
-		return;
-	}
-	if (! (ref($c) eq "X::API::Context") ) {
-		printf "c is a %s\n", ref($c);
-		return;
-	}
-	my $lims = parse_limits( $c );
-	printf STDERR "%s Limits:\n", $name;
-	my $tmpdate = Date::Manip::Date->new();
-	foreach my $lim (keys %{ $lims }) {
-		$tmpdate->parse("epoch ".$lims->{$lim}->{reset});
-		printf "%s.%s = {%s, /%s, %s}\n", $name, $lim,
-			$lims->{$lim}->{remaining},
-			$lims->{$lim}->{limit},
-			$tmpdate->printf("%Y%m%d %H:%M:%S");
-	}
-	print STDERR "\n";
-	my ($rl, $rlrem, $rlres) = (
-			$c->rate_limit,
-			$c->rate_limit_remaining,
-			$c->rate_limit_reset,
-	);
-	my ($ul, $ulrem, $ulres) = (
-			$c->user_limit,
-			$c->user_limit_remaining,
-			$c->user_limit_reset,
-	);
-	if (!defined($rl) || !defined($rlrem) || !defined($rlres)) {
-		return;
-	}
-	if (!defined($ul) || !defined($ulrem) || !defined($ulres)) {
-		if (!defined($ul)) {
-			$ul = -1;
-		}
-		if (!defined($ulrem)) {
-			$ulrem = 0;
-		}
-		if (!defined($ulres)) {
-			$ulres = 0;
-		}
-	}
-	my $nextreset = Date::Manip::Date->new();
-	$nextreset->parse( "epoch $rlres" );
-	if (!defined($smemcache->{$name}->{start}->{rlrem})) {
-		$smemcache->{$name}->{start}->{rlrem} = $rlrem-1;
-		$smemcache->{$name}->{start}->{rlres} = $rlres;
-		$smemcache->{$name}->{rl} = $rl;
-	}
-	$smemcache->{$name}->{last}->{rlrem} = $rlrem;
-	$smemcache->{$name}->{last}->{rlres} = $rlres;
-	$nextreset->parse( "epoch $ulres" );
-	if (!defined($smemcache->{$name}->{start}->{ulrem})) {
-		$smemcache->{$name}->{start}->{ulrem} = $ulrem-1;
-		$smemcache->{$name}->{start}->{ulres} = $ulres;
-		$smemcache->{$name}->{ul} = $ul;
-	}
-	$smemcache->{$name}->{last}->{ulrem} = $ulrem;
-	$smemcache->{$name}->{last}->{ulres} = $ulres;
-	return;
-}
 sub diestat {
 	my ($string) = @_;
 
@@ -1075,50 +1003,21 @@ sub show_rates {
 	if (defined($opt_q)) {
 		return;
 	}
-	foreach my $name (keys %{$smemcache}) {
-		my $start_res = $smemcache->{$name}->{start}->{rlres};
-		my $start_rem = $smemcache->{$name}->{start}->{rlrem};
-		my $last_res = $smemcache->{$name}->{last}->{rlres};
-		my $last_rem = $smemcache->{$name}->{last}->{rlrem};
-		my $rl = $smemcache->{$name}->{rl};
-		if (!defined($rl) || !defined($start_res) || !defined($start_rem)) {
-			return;
-		}
-		printf STDERR "%50s %d to %d/%d from %s to %s (rate)\n",
-			$name, $last_rem, $start_rem, $rl,
-			scalar localtime $start_res,
-			scalar localtime $last_res;
-		$start_res = $smemcache->{$name}->{start}->{ulres};
-		$start_rem = $smemcache->{$name}->{start}->{ulrem};
-		$last_res = $smemcache->{$name}->{last}->{ulres};
-		$last_rem = $smemcache->{$name}->{last}->{ulrem};
-		$rl = $smemcache->{$name}->{ul};
-		if (!defined($rl) || !defined($start_res) || !defined($start_rem)) {
-			next;
-		}
-		printf STDERR "%50s %d to %d/%d from %s to %s (user)\n",
-			$name, $last_rem, $start_rem, $rl,
-			scalar localtime $start_res,
-			scalar localtime $last_res;
-	}
 }
 
 sub xv2 {
-	my ($type, $query, $ratename, $tmp) = @_;
-	my $pdata;
+	my ($type, $query, $pdata) = @_;
 	if ($v>0) {
 		print "v2 $type query=${query}\n";
-	}
-	if ($type eq "post") {
-		$pdata = $ratename;
-		$ratename = $tmp;
 	}
 	my ($data, $c);
 
 	# try to pace
-	if (defined($ratename)) {
-		my $rem = $smemcache->{$ratename}->{last}->{rlrem};
-		my $res = $smemcache->{$ratename}->{last}->{rlres};
+	# XXX read cache for limits
+	if (0) {
+		my $ph; # placeholder
+		my $rem = $smemcache->{$ph}->{last}->{rlrem};
+		my $res = $smemcache->{$ph}->{last}->{rlres};
 		if (defined($rem) && defined($res)) {
 			if ($rem < 1) {
 				wait_till($res);
@@ -1157,9 +1056,6 @@ sub xv2 {
 			}
 			diestat("xv2($type,$query):\n$@");
 		}
-		if (defined($ratename)) {
-			save_rates($ratename, $c);
-		}
 		return ($data, $c);
 	}
 	if ($type eq "post") {
@@ -1179,9 +1075,6 @@ sub xv2 {
 		}
 		if ($@) {
 			diestat("xv2($type,$query):\n$@");
-		}
-		if (defined($ratename)) {
-			save_rates($ratename, $c);
 		}
 		return ($data, $c);
 	}
@@ -1214,9 +1107,6 @@ sub xv1 {
 			}
 			diestat("xv1($type,$query): $@");
 		}
-		if (defined($ratename)) {
-			save_rates($ratename, $c);
-		}
 		return ($data, $c);
 	}
 	if ($type eq "post") {
@@ -1237,9 +1127,6 @@ sub xv1 {
 				print "xv1 c: ".Dumper($c);
 			}
 			diestat("xv1($type,$query): $@");
-		}
-		if (defined($ratename)) {
-			save_rates($ratename, $c);
 		}
 		return ($data, $c);
 	}
@@ -1332,7 +1219,6 @@ sub file_to_mediaid {
 	if ($@) {
 		diestat("xv1($query):\n$@");
 	}
-	save_rates("media/upload", $c);
 	#print "post.media.upload: data ".Dumper($data);
 	#print "post.media.upload: c ".Dumper($data);
 	# see json/post.media.upload.data.json for both
@@ -1436,7 +1322,6 @@ sub chunk_init {
 	if ($@) {
 		diestat("chunk_init: client1($query, { media_type => $type, total_bytes => $size }: $@");
 	}
-	save_rates("media/upload", $c);
 	return $data;
 }
 sub chunk_append {
@@ -1457,7 +1342,6 @@ sub chunk_append {
 	if ($@) {
 		diestat("chunk_append: client1($query, { media_id => $mid, segment_index => ${chunk_num} }: $@");
 	}
-	save_rates("media/upload", $c);
 	return $data;
 }
 sub chunk_finalize {
@@ -1475,7 +1359,6 @@ sub chunk_finalize {
 	if ($@) {
 		diestat("chunk_finalize: client1($query, { media_id => $mid }: $@");
 	}
-	save_rates("media/upload", $c);
 	#print "video_to_mediaid: finalize cdata ".Dumper($data);
 	return $data;
 }
@@ -1507,7 +1390,6 @@ sub chunk_check_status {
 			);
 			diestat($msg);
 		}
-		save_rates("media/upload", $c);
 		$pi = $data->{'processing_info'};
 		if ($pi->{state} =~ /^(failed|succeeded)/) {
 			last;
@@ -1527,7 +1409,7 @@ sub like {
 		print "like payload = { ".Dumper($payload)." }\n";
 	}
 	my $uid = uinfo()->{id};
-	($data, $c) = xv2("post", "users/${uid}/likes", $payload, "likes");
+	($data, $c) = xv2("post", "users/${uid}/likes", $payload);
 	print Dumper($data);
 }
 sub desc {
@@ -1557,7 +1439,6 @@ sub set_alt_text {
 	my $payload->{"-to_json"} = $params;
 	($data, $c) = xv1("post", "media/metadata/create", $payload,
 		"media/metadata/create");
-	save_rates("media/metadata/create", $c);
 	#print "post.media.metadata.create: data ".Dumper($data);
 	# surprisingly, $VAR = ''
 	#print "post.media.metadata.create: c ".Dumper($c);
@@ -1608,13 +1489,13 @@ sub read_from_cache {
 		#}
 		return undef;
 	}
-	if (!defined($opt_q)) {
+	if ($v>0) {
 		print "Cache read $filename ($key)\n";
 	}
 	local $/ = undef;  # Read the entire file at once
 	my $data = Storable::thaw(<$fh>);
 	close $fh;
-	if (!defined($opt_q)) {
+	if ($v>0) {
 		print "read_from_cache($key) success!\n";
 	}
 	return $data;
