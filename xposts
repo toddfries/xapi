@@ -329,18 +329,15 @@ if (defined($opt_w)) {
 		$lims = parse_limits($c);
 	}
 	if ($@) {
+		if (defined $c) {
+			if (check_limits($lims)) {
+				goto retrypost;
+			}
+		}
 		if (!defined $req->{"community_id"}) {
 			$checkpost = $opt_W;
 		}
-		if (!defined $checkpost) {
-			# XXX instead of this + skipeval, pass a function to the call eventually
-			if (defined $c) {
-				if (check_limits($lims)) {
-					goto retrypost;
-				}
-			}
-			die "post_callv2(tweets, ...): $@";
-		}
+		die "post_callv2(tweets, ...): $@";
 	}
 	if (defined $checkpost) {
 		my $call = "posts/${checkpost}?tweet.fields=community_id";
