@@ -250,6 +250,8 @@ if (defined($opt_a)) {
 }
 if (defined($opt_w)) {
 	my $msg = $opt_w;
+	my $query = "posts";
+	my $name = $query;
 	my $req = {
 			text => $msg,
 	};
@@ -318,7 +320,7 @@ if (defined($opt_w)) {
 	my ($data, $c, $checkpost);
 	$skipeval = 1; # for nested eval skip below
 	eval {
-		($data, $c) = post_callv2("posts", $req);
+		($data, $c) = post_callv2($query, $req);
 	};
 	$skipeval = 0; # undo skip for other calls
 	if (!defined $c) {
@@ -330,14 +332,14 @@ if (defined($opt_w)) {
 	}
 	if ($@) {
 		if (defined $c) {
-			if (check_limits($lims)) {
+			if (check_limits($name, $lims)) {
 				goto retrypost;
 			}
 		}
 		if (!defined $req->{"community_id"}) {
 			$checkpost = $opt_W;
 		}
-		die "post_callv2(tweets, ...): $@";
+		die "post_callv2(posts, ...): $@";
 	}
 	if (defined $checkpost) {
 		my $call = "posts/${checkpost}?tweet.fields=community_id";
@@ -1037,22 +1039,13 @@ sub _call {
 	if ($v>0) {
 		print "v$ver $type query=${query}\n";
 	}
+	my $name = $query;
+	$name =~ s/\?.*$//;
+	$name =~ s/\/[0-9]{1,}/\/:id/;
 	my ($data, $c);
 
-	# try to pace
-	# XXX read cache for limits
-	if (0) {
-		my $ph; # placeholder
-		my $rem = $smemcache->{$ph}->{last}->{rlrem};
-		my $res = $smemcache->{$ph}->{last}->{rlres};
-		if (defined($rem) && defined($res)) {
-			if ($rem < 1) {
-				wait_till($res);
-			} else {
-				wait_till($res/2);
-			}
-		}
-	}
+	# XXX once limits are cached (fs or db), we can be 'smart' and
+	#     wait before we get an error.  For now, react to errors.
 
 	if ($type eq "get") {
 		_retry_get:
@@ -1071,14 +1064,11 @@ sub _call {
 		my $lims;
 		if (defined $c) {
 			$lims = parse_limits($c);
-			my $name = $query;
-			$name =~ s/\?.*$//;
-			$name =~ s/\/[0-9]{1,}/\/:id/;
 			show_limits($name, $lims);
 		}
 		if ($@) {
 			if (defined $c) {
-				if (check_limits($lims)) {
+				if (check_limits($name, $lims)) {
 					goto _retry_get;
 				}
 			}
@@ -1119,7 +1109,7 @@ sub _call {
 		}
 		if ($@) {
 			if (defined $c) {
-				if (check_limits($lims)) {
+				if (check_limits($name, $lims)) {
 					goto _retry_post;
 				}
 			}
@@ -1530,12 +1520,37 @@ sub parse_limits {
 	return $lims;
 }
 sub check_limits {
-	my ($lims) = @_;
+	my ($name, $lims) = @_;
+	my $timestamp = Date::Manip::Date->new();
+	my $wait = 0;
 	foreach my $lim (keys %{ $lims }) {
 		if ($lims->{$lim}->{remaining} < 1) {
-			wait_till($lims->{$lim}->{reset});
-			return 1;
+			$timestamp->parse("epoch ".$lims->{$lim}->{reset});
+			printf STDERR "Matched limit %s.%s { %d/%d, %s }...\n",
+				$name, $lim,
+				$lims->{$lim}->{remaining},
+				$lims->{$lim}->{limit},
+				$timestamp->printf("%Y%m%d %H:%M:%S");
+			my $thiswait = $lims->{$lim}->{reset};
+			if ($thiswait < 1) {
+				warn("lim ${name}.$lim reset is $thiswait");
+				continue;
+			}
+			if ($wait < 1 || ( $wait > 0 && $wait > $thiswait ) ) {
+				$wait = $thiswait;
+			}
+		} else {
+			$timestamp->parse("epoch ".$lims->{$lim}->{reset});
+			printf STDERR "!Matched limit %s.%s { %d/%d, %s }...\n",
+				$name, $lim,
+				$lims->{$lim}->{remaining},
+				$lims->{$lim}->{limit},
+				$timestamp->printf("%Y%m%d %H:%M:%S");
 		}
+	}
+	if ($wait > 0) {
+		wait_till($wait);
+		return 1;
 	}
 	return 0;
 }
