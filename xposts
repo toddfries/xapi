@@ -54,7 +54,7 @@ if (! -d $cachedir) {
 #   .. want to see if post replies die, then query the community_id incase thats why
 our $skipeval = 0;
 
-our $fields = { }; # ->{t} = tweet, ->{u} = user
+our $fields = { }; # ->{p} = post, ->{u} = user
 init_fields();
 
 our $opt_b; # shows bookmarks
@@ -202,7 +202,7 @@ if ($opt_b>0) {
 if (defined($opt_T)) {
 	use Try::Tiny;
 	# The `expansions` query parameter value [foo] is not one of [author_id,referenced_tweets.id,referenced_tweets.id.author_id,entities.mentions.username,entities.note.mentions.username,attachments.poll_ids,attachments.media_keys,attachments.media_source_tweet,in_reply_to_user_id,geo.place_id,edit_history_tweet_ids,article.cover_media,article.media_entities]
-	my $query = "tweet.fields=".$fields->{t}.
+	my $query = "tweet.fields=".$fields->{p}.
 	"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 	# media_fields [alt_text,duration_ms,height,media_key,non_public_metrics,organic_metrics,preview_image_url,promoted_metrics,public_metrics,type,url,variants,width]
 	"&media.fields=url,variants,media_key,type,alt_text,duration_ms,public_metrics".
@@ -516,6 +516,38 @@ sub cache_write {
 
 sub init_fields {
 	$fields = { };
+	$fields->{p} = "";
+	$fields->{p} .= "article,";
+	$fields->{p} .= "attachments,";
+	$fields->{p} .= "author_id,";
+	$fields->{p} .= "card_uri,";
+	$fields->{p} .= "context_annotations,";
+	$fields->{p} .= "community_id,";
+	$fields->{p} .= "conversation_id,";
+	$fields->{p} .= "created_at,";
+	$fields->{p} .= "display_text_range,";
+	$fields->{p} .= "edit_controls,";
+	$fields->{p} .= "edit_history_tweet_ids,";
+	$fields->{p} .= "entities,";
+	$fields->{p} .= "geo,";
+	$fields->{p} .= "id,";
+	$fields->{p} .= "in_reply_to_user_id,";
+	$fields->{p} .= "lang,";
+	$fields->{p} .= "media_metadata,";
+	$fields->{p} .= "note_tweet,";
+	$fields->{p} .= "possibly_sensitive,";
+	$fields->{p} .= "public_metrics,";
+	$fields->{p} .= "referenced_tweets,";
+	$fields->{p} .= "reply_settings,";
+	$fields->{p} .= "scopes,";
+	$fields->{p} .= "source,";
+	$fields->{p} .= "text,";
+	$fields->{p} .= "withheld";
+	# logic this for only my tweets
+	#$fields->{p} .= "promoted_metrics,";
+	#$fields->{p} .= "non_public_metrics,";
+	#$fields->{p} .= "organic_metrics,";
+
 	$fields->{u} = "";
 	$fields->{u} .= "connection_status,";
 	$fields->{u} .= "created_at,";
@@ -536,40 +568,13 @@ sub init_fields {
 	$fields->{u} .= "username,";
 	$fields->{u} .= "verified,";
 	$fields->{u} .= "verified_type,";
-	$fields->{u} .= "withheld&expansions=most_recent_tweet_id,";
-	$fields->{u} .= "pinned_tweet_id";
+	$fields->{u} .= "withheld";
 
-	$fields->{t} = "";
-	$fields->{t} .= "article,";
-	$fields->{t} .= "attachments,";
-	$fields->{t} .= "author_id,";
-	$fields->{t} .= "card_uri,";
-	$fields->{t} .= "context_annotations,";
-	$fields->{t} .= "community_id,";
-	$fields->{t} .= "conversation_id,";
-	$fields->{t} .= "created_at,";
-	$fields->{t} .= "display_text_range,";
-	$fields->{t} .= "edit_controls,";
-	$fields->{t} .= "edit_history_tweet_ids,";
-	$fields->{t} .= "entities,";
-	$fields->{t} .= "geo,";
-	$fields->{t} .= "id,";
-	$fields->{t} .= "in_reply_to_user_id,";
-	$fields->{t} .= "lang,";
-	$fields->{t} .= "media_metadata,";
-	$fields->{t} .= "note_tweet,";
-	$fields->{t} .= "possibly_sensitive,";
-	$fields->{t} .= "public_metrics,";
-	$fields->{t} .= "referenced_tweets,";
-	$fields->{t} .= "reply_settings,";
-	$fields->{t} .= "scopes,";
-	$fields->{t} .= "source,";
-	$fields->{t} .= "text,";
-	$fields->{t} .= "withheld";
-	# logic this for only my tweets
-	#$fields->{t} .= "promoted_metrics,";
-	#$fields->{t} .= "non_public_metrics,";
-	#$fields->{t} .= "organic_metrics,";
+	# expansions=
+	$fields->{x}  = "";
+	$fields->{x} .= "affiliation.user_id,";
+	$fields->{x} .= "most_recent_tweet_id,";
+	$fields->{x} .= "pinned_tweet_id";
 }
 
 sub uinfo {
@@ -581,7 +586,7 @@ sub uinfo {
 
 	my $ufields = $fields->{u};
 
-	my $tfields = $fields->{t};
+	my $tfields = $fields->{p};
 
 	my ($data, $c) = xv2("get", "users/me?".
 		"user.fields=$ufields&".
@@ -857,10 +862,22 @@ sub show_ustats {
 	# https://developer.x.com/en/docs/twitter-api/users/lookup/api-reference/get-users-by-username-username
 	# epansions=pinned_tweet_id
 	# user.fields=public_metrics,username,verified,verified_type,withheld,...
-	my $xtra="?user.fields=public_metrics,username,verified,verified_type,withheld,url,entities,location";
-	$xtra  .=",subscription_type";
+	my $xtra = "";
+	$xtra .= "?";
+	if (defined $fields->{x}) {
+		$xtra .= "expansions=".$fields->{x};
+		$xtra .= "&";
+	}
+	if (defined $fields->{u}) {
+		$xtra .= "user.fields=".$fields->{u};
+		$xtra .= "&";
+	}
+	if (defined $fields->{p}) {
+		$xtra .= "tweet.fields=".$fields->{p};
+	}
 	my $data = getuser_byname($handle);
 	my $id = $data->{id};
+
 	my ($res,$c) = xv2("get","users/$id$xtra");
 	if (!defined($res)) {
 		diestat("empty result querying $handle");
