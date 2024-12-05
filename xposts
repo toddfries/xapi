@@ -449,18 +449,18 @@ my $data = getuser_byname($who);
 my $id = $data->{id};
 
 
-our $tweetfields = "tweet.fields=author_id,";
-$tweetfields .= "created_at,";
-#$tweetfields .= "context_annotations,"; # what concepts 
-$tweetfields .= "entities,";
-$tweetfields .= "public_metrics,";
-#$tweetfields .= "non_public_metrics,"; # be sure to only enable this on posts I actually sent myself
-$tweetfields .= "referenced_tweets,";
-$tweetfields .= "in_reply_to_user_id,";
-$tweetfields .= "conversation_id";
+our $postfields = "tweet.fields=author_id,";
+$postfields .= "created_at,";
+#$postfields .= "context_annotations,"; # what concepts 
+$postfields .= "entities,";
+$postfields .= "public_metrics,";
+#$postfields .= "non_public_metrics,"; # be sure to only enable this on posts I actually sent myself
+$postfields .= "referenced_tweets,";
+$postfields .= "in_reply_to_user_id,";
+$postfields .= "conversation_id";
 
 my ($posts, $context) = xv2("get","users/${id}/tweets".
-	"?${tweetfields}".
+	"?${postfields}".
 	"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 	"&media.fields=url,variants,media_key,type".
 	"&max_results=${maxres}");
@@ -749,7 +749,7 @@ sub expand_tweet {
 				my ($q,$c) = xv2("get","posts".
 				    "?ids=".$ref->{id}.
 				    "&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
-				    "&${tweetfields}".
+				    "&${postfields}".
 				    "&media.fields=url,variants,media_key,type"
 				);
 				$text .= expand_tweet($level + 1, $q );
