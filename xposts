@@ -174,20 +174,17 @@ openlog($ident, $logopt, $facility);
 
 if ($opt_s>0) {
 	show_mystats();
-	show_rates();
 	exit(0);
 }
 
 if (defined($opt_j)) {
 	my ($data, $c) = xv2("get", $opt_j );
 	print Dumper($data);
-	show_rates();
 	exit(0);
 }
 if (defined($opt_J)) {
 	my ($data, $c) = xv1("get", $opt_J );
 	print Dumper($data);
-	show_rates();
 	exit(0);
 }
 	
@@ -195,7 +192,6 @@ if (defined($opt_J)) {
 
 if ($opt_b>0) {
 	show_bookmarks();
-	show_rates();
 	exit(0);
 }
 
@@ -216,7 +212,6 @@ if (defined($opt_T)) {
 		($posts, $context) = xv2("get","posts?ids=${t}&$query");
 		print expand_tweet(0, $posts);
 	}
-	show_rates();
 	exit(0);
 }
 
@@ -228,7 +223,6 @@ if (defined($opt_u)) {
 	my $mdata = file_to_mediaid( $file );
 	
 	printf "media_id=%s name=%s\n", $mdata->{media_id}, $file;
-	show_rates();
 	exit(0);
 }
 if (defined($opt_a)) {
@@ -243,7 +237,6 @@ if (defined($opt_a)) {
 	if ($opt_a eq "uinfo") {
 		my $data = uinfo();
 		print Dumper($data);
-		show_rates();
 		exit(0);
 	}
 	die "unknown action ${opt_a}";
@@ -359,8 +352,7 @@ if (defined($opt_w)) {
 	my $postid = $data->{data}->{id};
 	my $txt = $data->{data}->{text};
 	print "https://x.com/${uname}/status/${postid} \"${txt}\"\n";
-	show_rates();
-	#print "post.tweets.<msg> c: ".Dumper($c);
+	#print "post.posts.<msg> c: ".Dumper($c);
 	# see json/post.tweets.msg.json
 	exit(0);
 }
@@ -374,7 +366,6 @@ if (defined($opt_B)) {
 	my $uid = uinfo()->{id};
 	my ($data, $c) = xv2("post", "users/$uid/bookmarks", $payload);
 	print Dumper(($data,$c));
-	show_rates();
 	exit(0);
 }
 if (defined($opt_d)) {
@@ -385,7 +376,6 @@ if (defined($opt_d)) {
 	$payload->{"-to_json"} = $req;
 	my ($data,$c) = xv2("post", "dm_conversations/with/${uid}/messages", $payload);
 	print Dumper(($data,$c));
-	show_rates();
 	exit(0);
 }
 if (defined($opt_p)) {
@@ -396,7 +386,6 @@ if (defined($opt_p)) {
 		$req->{$var} = $val;
 	}
 	my ($data, $c) = post_callv2($call,$req);
-	show_rates();
 	exit(0);
 }
 sub post_callv2 {
@@ -423,7 +412,6 @@ if (defined($opt_S)) {
 	foreach my $who (@ARGV) {
 		show_ustats($who);
 	}
-	show_rates();
 	exit(0);
 }
 
@@ -441,7 +429,6 @@ if ($maxres > 100) {
 
 if ($opt_L>0) {
 	show_owned_lists($who);
-	show_rates();
 	exit(0);
 }
 
@@ -459,7 +446,7 @@ $postfields .= "referenced_tweets,";
 $postfields .= "in_reply_to_user_id,";
 $postfields .= "conversation_id";
 
-my ($posts, $context) = xv2("get","users/${id}/tweets".
+my ($posts, $context) = xv2("get","users/${id}/posts".
 	"?${postfields}".
 	"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 	"&media.fields=url,variants,media_key,type".
@@ -475,7 +462,6 @@ if (! defined($opt_q)) {
 	print expand_tweet(0, $posts);
 }
 
-show_rates();
 1;
 
 sub umcache_read {
@@ -1028,13 +1014,7 @@ sub diestat {
 
 	print STDERR $string;
 	print STDERR "\n";
-	show_rates();
 	exit(1);
-}
-sub show_rates {
-	if (defined($opt_q)) {
-		return;
-	}
 }
 
 sub xv1 {
