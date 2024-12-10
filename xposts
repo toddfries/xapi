@@ -112,7 +112,7 @@ my $section = "creds";
 
 our $opts = { };
 if (defined($opt_O)) {
-	foreach my $opt (split(/;/,$opt_O)) {
+	for my $opt (split(/;/,$opt_O)) {
 		if ($opt =~ /^([^=]+)=(.*)$/) {
 			my ($var, $val) = ($1, $2);
 			$opts->{$var} = $val;
@@ -206,7 +206,7 @@ if (defined($opt_T)) {
 	"&user.fields=username,withheld,protected,created_at,public_metrics,verified,verified_type";
 	#$query = "tweet.fields=lang,author_id,attachments,created_at,public_metrics&user.fields=created_at";
 	#$query = "tweet.fields=created_at&expansions=author_id&user.fields=created_at";
-	foreach my $t (split(/\s+,\s+/,$opt_T)) {
+	for my $t (split(/\s+,\s+/,$opt_T)) {
 		my ($posts, $context);
 
 		($posts, $context) = get2("posts?ids=${t}&$query");
@@ -269,7 +269,7 @@ if (defined($opt_w)) {
 	if (defined($opt_I)) {
 		my @ids;
 		my ($mdata, $mstr, $mid);
-		foreach my $img (split(/,/, $opt_I)) {
+		for my $img (split(/,/, $opt_I)) {
 			my ($f,$txt)=split(/=/,$img);
 			if ($f =~ /^[0-9]+$/) {
 				$mid = $f;
@@ -376,7 +376,7 @@ if (defined($opt_d)) {
 if (defined($opt_p)) {
 	my ($call,@payloads) = split(/;/,$opt_p);
 	my $req = { };
-	foreach my $part ( @payloads ) {
+	for my $part ( @payloads ) {
 		my ($var,$val) = split(/=/,$part);
 		$req->{$var} = $val;
 	}
@@ -425,7 +425,7 @@ if (!defined($who)) {
 }
 
 if (defined($opt_S)) {
-	foreach my $who (@ARGV) {
+	for my $who (@ARGV) {
 		show_ustats($who);
 	}
 	exit(0);
@@ -666,17 +666,17 @@ sub expand_tweet {
 		print "\n\nposts: ".Dumper($posts)."\n\n";
 	}
 
-	foreach my $user ( @{ $posts->{includes}->{users} } ) {
+	for my $user ( @{ $posts->{includes}->{users} } ) {
 		if (defined(cache_read('u',$user->{id}))) {
 			next;
 		}
 		umcache_write($user);
 	}
-	foreach my $post ( @{ $posts->{includes}->{tweets} } ) {
+	for my $post ( @{ $posts->{includes}->{tweets} } ) {
 		#diestat(" post: ". Dumper($post));
 		my $tid = $post->{id};
 
-		foreach my $var (%{ $post }) {
+		for my $var (%{ $post }) {
 			$pmemcache->{$tid}->{$var} = $post->{$var};
 		}
 
@@ -692,7 +692,7 @@ sub expand_tweet {
 				"&user.fields=public_metrics".
 				$pg
 			    );
-			    foreach my $user (@{ $likes->{data} }) {
+			    for my $user (@{ $likes->{data} }) {
 				$ucount++;
 				    push @{$pmemcache->{$tid}->{liking_users}}, $user;
 			    }
@@ -707,10 +707,10 @@ sub expand_tweet {
 		}
 	}
 
-	foreach my $media ( @{ $posts->{includes}->{media} } ) {
+	for my $media ( @{ $posts->{includes}->{media} } ) {
 		my $mkey = $media->{media_key};
 
-		foreach my $var (%{ $media }) {
+		for my $var (%{ $media }) {
 			if (defined($mmemcache->{$mkey}->{$var})) {
 				next;
 			}
@@ -719,7 +719,7 @@ sub expand_tweet {
 	}
 
 	my $tcount = 0;
-	foreach my $post ( @{ $posts->{data} } ) {
+	for my $post ( @{ $posts->{data} } ) {
 		if ($tcount++ >= $opt_r) {
 			last;
 		}
@@ -728,7 +728,7 @@ sub expand_tweet {
 		my $status = "";
 		my $rstr = "";
 		my $text = "";
-		foreach my $ref ( @{ $post->{referenced_tweets} } ) {
+		for my $ref ( @{ $post->{referenced_tweets} } ) {
 			my $tstr = $ref->{type};
 			my $recurse = 0;
 			if ($ref->{type} eq "replied_to") {
@@ -796,10 +796,10 @@ sub expand_tweet {
 		}
 		$returnstr .= sprintf "%s%25s %d/%d/%d/%d = Like/RT/Imp/Quote count\n", $prestr, " ", $plike, $prt, $pimp, $pquote;
 
-		foreach my $media ( @{ $post->{includes}->{media} } ) {
+		for my $media ( @{ $post->{includes}->{media} } ) {
 			$returnstr .= expand_media($prestr, $media);
 		}
-		foreach my $mkey (@{ $post->{attachments}->{media_keys} }) {
+		for my $mkey (@{ $post->{attachments}->{media_keys} }) {
 			#print "\nmkey: $mkey\n";
 			if (!defined($mmemcache->{$mkey})) {
 				print "mmemcache EEXIST for $mkey\n";
@@ -808,7 +808,7 @@ sub expand_tweet {
 			$returnstr .= expand_media($prestr, $mmemcache->{$mkey} );
 		}
 		my $likestr = "";
-		foreach my $user (sort { $a->{username} cmp $b->{username} } @{ $pmemcache->{$tid}->{liking_users} }) {
+		for my $user (sort { $a->{username} cmp $b->{username} } @{ $pmemcache->{$tid}->{liking_users} }) {
 			$likestr .= "\@".$user->{username}.", ";
 		}
 		if (length($likestr) > 0) {
@@ -840,7 +840,7 @@ sub expand_media {
 		if (defined($vc)) {
 			$returnstr .= sprintf "%s%25d views\n", $prestr, $vc;
 		}
-		foreach my $v ( @{ $media->{variants} } ) {
+		for my $v ( @{ $media->{variants} } ) {
 			$v->{content_type} =~ s/application/app/;
 			my $bitrate = $v->{bit_rate};
 			my $xtra = "";
@@ -973,12 +973,12 @@ sub show_mystats {
 	# seems this is unlimited calls?
 	($data, $c) = get1("account/settings");
 	my $seen = { };
-	foreach my $v (('allow_contributor_request', 'allow_dms_from',
+	for my $v (('allow_contributor_request', 'allow_dms_from',
 		'language')) {
 		$seen->{$v} = 1;
 		print "Account $v: ".$data->{$v}, "\n";
 	}
-	foreach my $v (sort keys %{$data}) {
+	for my $v (sort keys %{$data}) {
 		if (defined($seen->{$v})) {
 			next;
 		}
@@ -988,7 +988,7 @@ sub show_mystats {
 		}
 		if (ref($data->{$v}) eq "HASH") {
 			my %info = %{$data->{$v}};
-			foreach my $t (sort keys %info) {
+			for my $t (sort keys %info) {
 				print "Account ${v}{$t}= ".$info{$t}."\n";
 			}
 			next;
@@ -1009,7 +1009,7 @@ sub show_owned_lists {
 	if ($v>0) {
 		print "owned lists: ", Dumper($data), "\n\n";
 	}
-	foreach my $d (@{ $data->{data} }) {
+	for my $d (@{ $data->{data} }) {
 		printf "%20d %s\n", $d->{id}, $d->{name};
 	}
 }
@@ -1181,7 +1181,7 @@ sub file_to_mediaid {
 	}
 	my $mt;
 	if (defined($format)) {
-		foreach my $f (keys %{ $mti }) {
+		for my $f (keys %{ $mti }) {
 			if ($format =~ /$f$/) {
 				$mt = $mti->{$f};
 			}
@@ -1252,7 +1252,7 @@ sub check_vid_mime_type {
 		'MPEG sequence' => 'video/mpeg',
 		'WAVE audio' => 'audio/x-wav',
 	};
-	foreach my $m (keys %{$mtypes}) {
+	for my $m (keys %{$mtypes}) {
 		if ($mime_type =~ /${m}/) {
 			return $mtypes->{$m};
 		}
@@ -1494,7 +1494,7 @@ sub parse_limits {
 		print STDERR "Headers:\n";
 	}
 	my $resp = $c->http_response;
-	foreach my $h ($resp->header_field_names) {
+	for my $h ($resp->header_field_names) {
 		my $val = $resp->header($h);
 		if (! defined $val) {
 			next;
@@ -1520,7 +1520,7 @@ sub check_limits {
 	my ($name, $lims) = @_;
 	my $timestamp = Date::Manip::Date->new();
 	my $wait = 0;
-	foreach my $lim (keys %{ $lims }) {
+	for my $lim (keys %{ $lims }) {
 		if ($lims->{$lim}->{remaining} < 1) {
 			$timestamp->parse("epoch ".$lims->{$lim}->{reset});
 			printf STDERR "Matched limit %s.%s { %d/%d, %s }...\n",
@@ -1555,7 +1555,7 @@ sub show_limits {
 	my ($name, $lims) = @_;
 	my $timestamp = Date::Manip::Date->new();
 
-	foreach my $lim (keys %{ $lims }) {
+	for my $lim (keys %{ $lims }) {
 		$timestamp->parse("epoch ".$lims->{$lim}->{reset});
 		printf "  %s.%s = {%d/%d, %s}\n", $name, $lim,
 			$lims->{$lim}->{remaining},
