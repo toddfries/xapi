@@ -178,12 +178,12 @@ if ($opt_s>0) {
 }
 
 if (defined($opt_j)) {
-	my ($data, $c) = xv2("get", $opt_j );
+	my ($data, $c) = get2( $opt_j );
 	print Dumper($data);
 	exit(0);
 }
 if (defined($opt_J)) {
-	my ($data, $c) = xv1("get", $opt_J );
+	my ($data, $c) = get1( $opt_J );
 	print Dumper($data);
 	exit(0);
 }
@@ -209,7 +209,7 @@ if (defined($opt_T)) {
 	foreach my $t (split(/\s+,\s+/,$opt_T)) {
 		my ($posts, $context);
 
-		($posts, $context) = xv2("get","posts?ids=${t}&$query");
+		($posts, $context) = get2("posts?ids=${t}&$query");
 		print expand_tweet(0, $posts);
 	}
 	exit(0);
@@ -313,7 +313,7 @@ if (defined($opt_w)) {
 	my ($data, $c, $checkpost);
 	$skipeval = 1; # for nested eval skip below
 	eval {
-		($data, $c) = post_callv2($query, $req);
+		($data, $c) = post2($query, $req);
 	};
 	$skipeval = 0; # undo skip for other calls
 	if (!defined $c) {
@@ -332,11 +332,11 @@ if (defined($opt_w)) {
 		if (!defined $req->{"community_id"}) {
 			$checkpost = $opt_W;
 		}
-		die "post_callv2(posts, ...): $@";
+		die "post2(posts, ...): $@";
 	}
 	if (defined $checkpost) {
 		my $call = "posts/${checkpost}?tweet.fields=community_id";
-		($data, $c) = xv2("get", $call);
+		($data, $c) = get2($call);
 		my $cid = $data->{data}->{community_id};
 		if (!defined $cid) {
 			printf "No cid for $checkpost\n";
@@ -360,11 +360,8 @@ if (defined($opt_w)) {
 if (defined($opt_B)) {
 	my $postid = $opt_B;
 	my $req = { tweet_id => $postid };
-	my $payload = { };
-	$payload->{"-to_json"} = $req;
-
 	my $uid = uinfo()->{id};
-	my ($data, $c) = xv2("post", "users/$uid/bookmarks", $payload);
+	my ($data, $c) = post2("users/$uid/bookmarks", $req);
 	print Dumper(($data,$c));
 	exit(0);
 }
@@ -372,9 +369,7 @@ if (defined($opt_d)) {
 	my $uid = $opt_d;
 	my $msg = $ARGV[0];
 	my $req = { text => $msg };
-	my $payload = { };
-	$payload->{"-to_json"} = $req;
-	my ($data,$c) = xv2("post", "dm_conversations/with/${uid}/messages", $payload);
+	my ($data,$c) = post2("dm_conversations/with/${uid}/messages", $req);
 	print Dumper(($data,$c));
 	exit(0);
 }
@@ -385,17 +380,38 @@ if (defined($opt_p)) {
 		my ($var,$val) = split(/=/,$part);
 		$req->{$var} = $val;
 	}
-	my ($data, $c) = post_callv2($call,$req);
+	my ($data, $c) = post2($call,$req);
 	exit(0);
 }
-sub post_callv2 {
+sub get1 {
+	my ($call) = @_;
+	my ($data, $c) = _call(1, "get", $call);
+	return ($data, $c);
+}
+sub get2 {
 	my ($call,$req) = @_;
+	my ($data, $c) = _call(2, "get", $call);
+	return ($data, $c);
+}
+sub post1 {
+	my ($call,$req) = @_;
+	my ($data, $c) = _post(1, $call, $req);
+	return ($data, $c);
+}
+sub post2 {
+	my ($call,$req) = @_;
+	my ($data, $c) = _post(2, $call, $req);
+	return ($data, $c);
+}
+
+sub _post {
+	my ($rev, $call,$req) = @_;
 	my $payload = { };
 	$payload->{"-to_json"} = $req;
 	if ($v>0) {
 		print "$call payload = ".Dumper($payload);
 	}
-	my ($data, $c) = xv2("post", $call, $payload);
+	my ($data, $c) = _call($rev, "post", $call, $payload);
 	if ($v>0) {
 		print Dumper(($data,$c));
 	}
@@ -446,7 +462,7 @@ $postfields .= "referenced_tweets,";
 $postfields .= "in_reply_to_user_id,";
 $postfields .= "conversation_id";
 
-my ($posts, $context) = xv2("get","users/${id}/posts".
+my ($posts, $context) = get2("users/${id}/posts".
 	"?${postfields}".
 	"&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 	"&media.fields=url,variants,media_key,type".
@@ -574,7 +590,7 @@ sub uinfo {
 
 	my $tfields = $fields->{p};
 
-	my ($data, $c) = xv2("get", "users/me?".
+	my ($data, $c) = get2("users/me?".
 		"user.fields=$ufields&".
 		"tweet.fields=$tfields");
 	umcache_write($data->{data});
@@ -591,7 +607,7 @@ sub getuser_byname {
 	}
 
 	# cache the who -> id somewhere persistent to reduce api calls
-	my ($res,$c) = xv2("get","users/by/username/$who");
+	my ($res,$c) = get2("users/by/username/$who");
 	if (!defined($res)) {
 		diestat("empty result querying $who");
 	}
@@ -619,7 +635,7 @@ sub getuser_byid {
 		return $data;
 	}
 	my $c;
-	($data, $c) = xv2("get","users/${id}");
+	($data, $c) = get2("users/${id}");
 	$data = $data->{data};
 
 	umcache_write($data);
@@ -669,7 +685,7 @@ sub expand_tweet {
 			my $pg = "";
 			my $ucount = 0;
 			while(1) {
-			    my ($likes,$c) = xv2("get","posts/${tid}/liking_users".
+			    my ($likes,$c) = get2("posts/${tid}/liking_users".
 				"?max_results=100".
 				#"&expansions=pinned_tweet_id".
 				"&tweet.fields=conversation_id,entities,public_metrics".
@@ -732,7 +748,7 @@ sub expand_tweet {
 				$status = "? ";
 			}
 			if ($recurse > 0) {
-				my ($q,$c) = xv2("get","posts".
+				my ($q,$c) = get2("posts".
 				    "?ids=".$ref->{id}.
 				    "&expansions=author_id,entities.mentions.username,in_reply_to_user_id,referenced_tweets.id,attachments.media_keys".
 				    "&${postfields}".
@@ -864,7 +880,7 @@ sub show_ustats {
 	my $data = getuser_byname($handle);
 	my $id = $data->{id};
 
-	my ($res,$c) = xv2("get","users/$id$xtra");
+	my ($res,$c) = get2("users/$id$xtra");
 	if (!defined($res)) {
 		diestat("empty result querying $handle");
 	}
@@ -911,7 +927,7 @@ sub get_creds {
 		$me_glob = $data;
 		return $me_glob;
 	}
-	my ($me_glob, $c) = xv1("get","account/verify_credentials");
+	my ($me_glob, $c) = get1("account/verify_credentials");
 	if ($v>0) {
 		print "v1 get query=account/verify_credentials\n";
 	}
@@ -955,7 +971,7 @@ sub show_mystats {
 	}
 
 	# seems this is unlimited calls?
-	($data, $c) = xv1("get","account/settings");
+	($data, $c) = get1("account/settings");
 	my $seen = { };
 	foreach my $v (('allow_contributor_request', 'allow_dms_from',
 		'language')) {
@@ -989,7 +1005,7 @@ sub show_owned_lists {
 	my $id = $data->{id};
 
 
-	($data, $c) = xv2("get", "users/${id}/owned_lists");
+	($data, $c) = get2("users/${id}/owned_lists");
 	if ($v>0) {
 		print "owned lists: ", Dumper($data), "\n\n";
 	}
@@ -1004,7 +1020,7 @@ sub show_bookmarks {
 
 	my $id = uinfo()->{id};
 	my $maxres=100;
-	($data, $c) = xv2("get", "users/${id}/bookmarks");
+	($data, $c) = get2("users/${id}/bookmarks");
 		# "?max_results=${maxres}&id=${id}");
 	print "bookmarks: ", Dumper($data), "\n\n";
 }
@@ -1015,20 +1031,6 @@ sub diestat {
 	print STDERR $string;
 	print STDERR "\n";
 	exit(1);
-}
-
-sub xv1 {
-	my ($type, $query, $pdata) = @_;
-
-	my ($data, $c) = _call(1, $type, $query, $pdata);
-	return ($data, $c);
-}
-
-sub xv2 {
-	my ($type, $query, $pdata) = @_;
-
-	my ($data, $c) = _call(2, $type, $query, $pdata);
-	return ($data, $c);
 }
 
 sub _call {
@@ -1203,7 +1205,7 @@ sub file_to_mediaid {
 		($data, $c) = $client->{1}->request(post => $query, $payload);
 	};
 	if ($@) {
-		diestat("xv1($query):\n$@");
+		diestat("post1($query):\n$@");
 	}
 	#print "post.media.upload: data ".Dumper($data);
 	#print "post.media.upload: c ".Dumper($data);
@@ -1389,13 +1391,13 @@ sub like {
 	if (!defined($args[0])) {
 		die "called like with no post to like";
 	}
-	my $payload = { };
-	$payload->{"-to_json"}->{tweet_id} = $args[0];
+	my $req = { };
+	$req->{tweet_id} = $args[0];
 	if ($v>0) {
-		print "like payload = { ".Dumper($payload)." }\n";
+		print "like req = { ".Dumper($req)." }\n";
 	}
 	my $uid = uinfo()->{id};
-	($data, $c) = xv2("post", "users/${uid}/likes", $payload);
+	($data, $c) = post2("users/${uid}/likes", $req);
 	print Dumper($data);
 }
 sub desc {
@@ -1422,9 +1424,7 @@ sub set_alt_text {
 			text => "${text}",
 		},
 	};
-	my $payload->{"-to_json"} = $params;
-	($data, $c) = xv1("post", "media/metadata/create", $payload,
-		"media/metadata/create");
+	($data, $c) = post1("media/metadata/create", $params);
 	#print "post.media.metadata.create: data ".Dumper($data);
 	# surprisingly, $VAR = ''
 	#print "post.media.metadata.create: c ".Dumper($c);
