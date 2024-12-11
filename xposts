@@ -97,9 +97,7 @@ $opt_v = 0;
 
 getopts('a:bc:d:j:lp:qr:su:vw:B:I:J:Q:ST:LNO:W:');
 
-if (!defined($opt_I)) {
-	$opt_I = $opt_i;
-}
+$opt_I //= $opt_i;
 
 if (!defined($opt_c)) {
 	die "Config file '${opt_c}' EEXIST";
@@ -316,9 +314,9 @@ if (defined($opt_w)) {
 		($data, $c) = post2($query, $req);
 	};
 	$skipeval = 0; # undo skip for other calls
-	if (!defined $c) {
-		$c = $client->{2}->{_last_context};
-	}
+
+	$c //= $client->{2}->{_last_context};
+
 	my $lims;
 	if (defined $c) {
 		$lims = parse_limits($c);
@@ -474,7 +472,7 @@ if ($v > 0) {
 if (!defined($posts)) {
 	diestat("posts for $id returned undef");
 }
-if (! defined($opt_q)) {
+if (!defined($opt_q)) {
 	print expand_tweet(0, $posts);
 }
 
@@ -504,9 +502,7 @@ sub cache_read {
 	my ($cname, $var) = @_;
 
 	my $data = $gc->{$cname}->{$var};
-	if (!defined($data)) {
-		$data = read_from_cache("${cname}.${var}");
-	}
+	$data //= read_from_cache("${cname}.${var}");
 	return $data;
 
 }
@@ -779,21 +775,11 @@ sub expand_tweet {
 			$post->{public_metrics}->{quote_count},
 		);
 
-		if (!defined($plike)) {
-			$plike = 0;
-		}
-		if (!defined($prt)) {
-			$prt = 0;
-		}
-		if (!defined($preply)) {
-			$preply = 0;
-		}
-		if (!defined($pquote)) {
-			$pquote = 0;
-		}
-		if (!defined($pimp)) {
-			$pimp = 0;
-		}
+		$plike  //= 0;
+		$prt    //= 0;
+		$preply //= 0;
+		$pquote //= 0;
+		$pimp   //= 0;
 		$returnstr .= sprintf "%s%25s %d/%d/%d/%d = Like/RT/Imp/Quote count\n", $prestr, " ", $plike, $prt, $pimp, $pquote;
 
 		for my $media ( @{ $post->{includes}->{media} } ) {
