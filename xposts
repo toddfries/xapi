@@ -330,7 +330,7 @@ if (defined($opt_w)) {
 		if (!defined $req->{"community_id"}) {
 			$checkpost = $opt_W;
 		}
-		die "post2(posts, ...): $@";
+		die sprintf("post2(posts, ...): %s", $@);
 	}
 	if (defined $checkpost) {
 		my $call = "posts/${checkpost}?tweet.fields=community_id";
@@ -1060,7 +1060,7 @@ sub _call {
 			if (defined($data) && $v>0) {
 				print Dumper($data);
 			}
-			diestat("_call($ver,$type,$query):\n$@");
+			diestat(sprintf("_call($ver,$type,$query):\n%s",$@));
 		}
 		return ($data, $c);
 	}
@@ -1098,7 +1098,7 @@ sub _call {
 					goto _retry_post;
 				}
 			}
-			diestat("_call($ver,$type,$query):\n$@");
+			diestat(sprintf("_call($ver,$type,$query):\n%s",$@));
 		}
 		return ($data, $c);
 	}
@@ -1191,7 +1191,7 @@ sub file_to_mediaid {
 		($data, $c) = $client->{1}->request(post => $query, $payload);
 	};
 	if ($@) {
-		diestat("post1($query):\n$@");
+		diestat(sprintf("post1($query):\n%s",$@));
 	}
 	#print "post.media.upload: data ".Dumper($data);
 	#print "post.media.upload: c ".Dumper($data);
@@ -1294,7 +1294,7 @@ sub chunk_init {
 		($data, $c) = $client->{1}->request(post => $query, $payload);
 	};
 	if ($@) {
-		diestat("chunk_init: client->{1}($query, { media_type => $type, total_bytes => $size }: $@");
+		diestat(sprintf("chunk_init: client->{1}($query, { media_type => $type, total_bytes => $size }: %s",$@));
 	}
 	return $data;
 }
@@ -1314,7 +1314,7 @@ sub chunk_append {
 		($data, $c) = $client->{1}->request(post => $query, $payload);
 	};
 	if ($@) {
-		diestat("chunk_append: client->{1}($query, { media_id => $mid, segment_index => ${chunk_num} }: $@");
+		diestat(sprintf("chunk_append: client->{1}($query, { media_id => $mid, segment_index => ${chunk_num} }: %s",$@));
 	}
 	return $data;
 }
@@ -1331,7 +1331,7 @@ sub chunk_finalize {
 		($data, $c) = $client->{1}->request(post => $query, $payload);
 	};
 	if ($@) {
-		diestat("chunk_finalize: client->{1}($query, { media_id => $mid }: $@");
+		diestat(sprintf("chunk_finalize: client->{1}($query, { media_id => $mid }: %s",$@));
 	}
 	#print "video_to_mediaid: finalize cdata ".Dumper($data);
 	return $data;
@@ -1358,9 +1358,10 @@ sub chunk_check_status {
 			($data, $c) = $client->{1}->request(get => $query, $payload);
 		};
 		if ($@) {
-			my $msg = sprintf("chunk_check_status: state=%s, check_after_secs=%s: $@\n",
+			my $msg = sprintf("chunk_check_status: state=%s, check_after_secs=%s: %s\n",
 				$data->{'processing_info'}->{state},
 				$data->{'processing_info'}->{'check_after_secs'},
+				$@
 			);
 			diestat($msg);
 		}
