@@ -237,6 +237,11 @@ if (defined($opt_a)) {
 		print Dumper($data);
 		exit(0);
 	}
+	if ($opt_a eq "delete") {
+		my ($data, $c) = delete2(@ARGV[0]);
+		print Dumper($data);
+		exit(0);
+	}
 	die "unknown action ${opt_a}";
 }
 if (defined($opt_w)) {
@@ -399,6 +404,11 @@ sub post1 {
 sub post2 {
 	my ($call,$req) = @_;
 	my ($data, $c) = _post(2, $call, $req);
+	return ($data, $c);
+}
+sub delete2 {
+	my ($call,$req) = @_;
+	my ($data, $c) = _call(2, "delete", $call);
 	return ($data, $c);
 }
 
@@ -1035,7 +1045,8 @@ sub _call {
 	if ($type eq "get") {
 		_retry_get:
 		eval {
-			($data, $c) = $client->{$ver}->get($query);
+			#($data, $c) = $client->{$ver}->get($query);
+			($data, $c) = $client->{$ver}->request(get => $query);
 		};
 		my $lc = $client->{$ver}->{_last_context};
 		if ($v>0) {
@@ -1067,7 +1078,8 @@ sub _call {
 	if ($type eq "post") {
 		_retry_post:
 		if ($skipeval > 0) {
-			($data, $c) = $client->{$ver}->post($query, $pdata);
+			#($data, $c) = $client->{$ver}->post($query, $pdata);
+			($data, $c) = $client->{$ver}->request(post => $query, $pdata);
 		} else {
 			eval {
 				($data, $c) = $client->{$ver}->post($query, 
@@ -1097,6 +1109,39 @@ sub _call {
 				if (check_limits($name, $lims)) {
 					goto _retry_post;
 				}
+			}
+			diestat(sprintf("_call($ver,$type,$query):\n%s",$@));
+		}
+		return ($data, $c);
+	}
+	if ($type eq "delete") {
+		_retry_delete:
+		eval {
+			#($data, $c) = $client->{$ver}->delete($query);
+			($data, $c) = $client->{$ver}->request(delete => $query, $pdata);
+		};
+		my $lc = $client->{$ver}->{_last_context};
+		if ($v>0) {
+			print "data: ".Dumper($data);
+			print "c: ".Dumper($c);
+			print "client->lastcontext: ".Dumper($lc)."\n";
+		}
+		if (!defined $c && defined $lc) {
+			$c = $lc;
+		}
+		my $lims;
+		if (defined $c) {
+			$lims = parse_limits($c);
+			show_limits($name, $lims);
+		}
+		if ($@) {
+			if (defined $c) {
+				if (check_limits($name, $lims)) {
+					goto _retry_delete;
+				}
+			}
+			if (defined($data) && $v>0) {
+				print Dumper($data);
 			}
 			diestat(sprintf("_call($ver,$type,$query):\n%s",$@));
 		}
