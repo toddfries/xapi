@@ -238,7 +238,7 @@ if (defined($opt_a)) {
 		exit(0);
 	}
 	if ($opt_a eq "delete") {
-		my ($data, $c) = delete2(@ARGV[0]);
+		my ($data, $c) = delete2($ARGV[0]);
 		print Dumper($data);
 		exit(0);
 	}
@@ -1045,8 +1045,7 @@ sub _call {
 	if ($type eq "get") {
 		_retry_get:
 		eval {
-			#($data, $c) = $client->{$ver}->get($query);
-			($data, $c) = $client->{$ver}->request(get => $query);
+			($data, $c) = $client->{$ver}->request($type => $query);
 		};
 		my $lc = $client->{$ver}->{_last_context};
 		if ($v>0) {
@@ -1078,13 +1077,10 @@ sub _call {
 	if ($type eq "post") {
 		_retry_post:
 		if ($skipeval > 0) {
-			#($data, $c) = $client->{$ver}->post($query, $pdata);
-			($data, $c) = $client->{$ver}->request(post => $query, $pdata);
+			($data, $c) = $client->{$ver}->request($type => $query, $pdata);
 		} else {
 			eval {
-				($data, $c) = $client->{$ver}->post($query, 
-					$pdata
-				);
+			($data, $c) = $client->{$ver}->request($type => $query, $pdata);
 			};
 		}
 		my $lc = $client->{$ver}->{_last_context};
