@@ -34,6 +34,12 @@ use Digest::SHA1 qw(sha1_hex);
 use Graphics::Magick;
 use File::MMagic;
 
+$Data::Dumper::Indent = 1;
+$Data::Dumper::Purity = 1;
+$Data::Dumper::Deepcopy = 1;
+$Data::Dumper::Sortkeys = 1;
+
+
 my $ident = "Xposts";
 my $logopt = 'pid';
 my $facility = 'user';
@@ -312,46 +318,40 @@ if (defined($opt_w)) {
 		print "POST v2 tweets .. payload: \n";
 		print Dumper($req);
 	}
-	retrypost:
-	my ($data, $c, $checkpost);
-	$skipeval = 1; # for nested eval skip below
-	eval {
+	my ($data, $c) = post2($query, $req, sub {
+		my ($ver, $type, $call, $pdata, $c) = @_;
+		print "sub ($ver,$type,$call,$pdata,...) starting\n";
+		my $req = $pdata->{'-to_json'};
+		my $cid = $req->{"community_id"};
+		if (defined $cid) {
+			if ($v>0) {
+				print "cid=$cid oops\n";
+			}
+			return (undef, undef);
+		}
+		if (!defined $opt_W) {
+			if ($v>0) {
+				print "opt_W=undef oops\n";
+			}
+			return (undef, undef);
+		}
+		#if ($c->{result}->{status} == 403 && $c->{result}->{detail} =~ /not permitted to create a non Community/) {
+		print "sub get2(posts/${opt_W}?tweet.fields=community_id\n";
+		my $data;
+		($data, $c) = get2("posts/${opt_W}?tweet.fields=community_id");
+		$cid = $data->{data}->{community_id};
+		if (!defined $cid) {
+			printf "No cid for $opt_W\n";
+			sleep(1);
+			return (undef, undef);
+		}
+		$req->{"community_id"} = $cid;
 		($data, $c) = post2($query, $req);
-	};
-	$skipeval = 0; # undo skip for other calls
+		return ($data, $c);
+	});
 
 	$c //= $client->{2}->{_last_context};
 
-	my $lims;
-	if (defined $c) {
-		$lims = parse_limits($c);
-	}
-	if ($@) {
-		if (defined $c) {
-			if (check_limits($name, $lims)) {
-				goto retrypost;
-			}
-		}
-		if (!defined $req->{"community_id"}) {
-			$checkpost = $opt_W;
-		}
-		die sprintf("post2(posts, ...): %s", $@);
-	}
-	if (defined $checkpost) {
-		my $call = "posts/${checkpost}?tweet.fields=community_id";
-		($data, $c) = get2($call);
-		my $cid = $data->{data}->{community_id};
-		if (!defined $cid) {
-			printf "No cid for $checkpost\n";
-			sleep(1);
-			#print "Check post $checkpost returned:\n";
-			#print Dumper($data);
-			#exit(1);
-		} else {
-			$req->{"community_id"} = $cid;
-		}
-		goto retrypost;
-	}
 	my $postid = $data->{data}->{id};
 	my $txt = $data->{data}->{text};
 	print "https://x.com/${uname}/status/${postid} \"${txt}\"\n";
@@ -386,47 +386,6 @@ if (defined($opt_p)) {
 	my ($data, $c) = post2($call,$req);
 	exit(0);
 }
-sub get1 {
-	my ($call) = @_;
-	my ($data, $c) = _call(1, "get", $call);
-	return ($data, $c);
-}
-sub get2 {
-	my ($call,$req) = @_;
-	my ($data, $c) = _call(2, "get", $call);
-	return ($data, $c);
-}
-sub post1 {
-	my ($call,$req) = @_;
-	my ($data, $c) = _post(1, $call, $req);
-	return ($data, $c);
-}
-sub post2 {
-	my ($call,$req) = @_;
-	my ($data, $c) = _post(2, $call, $req);
-	return ($data, $c);
-}
-sub delete2 {
-	my ($call,$req) = @_;
-	my ($data, $c) = _call(2, "delete", $call);
-	return ($data, $c);
-}
-
-sub _post {
-	my ($rev, $call,$req) = @_;
-	my $payload = { };
-	$payload->{"-to_json"} = $req;
-	if ($v>0) {
-		print "$call payload = ".Dumper($payload);
-	}
-	my ($data, $c) = _call($rev, "post", $call, $payload);
-	if ($v>0) {
-		print Dumper(($data,$c));
-	}
-	return ($data,$c);
-}
-	
-
 my $who = $ARGV[0];
 if (!defined($who)) {
 	die "need a username on cli";
@@ -1029,122 +988,105 @@ sub diestat {
 	exit(1);
 }
 
+sub get1 {
+	my ($call) = @_;
+	my ($data, $c) = _call(1, "get", $call);
+	return ($data, $c);
+}
+sub get2 {
+	my ($call,$req) = @_;
+	my ($data, $c) = _call(2, "get", $call);
+	return ($data, $c);
+}
+sub post1 {
+	my ($call,$req) = @_;
+	my ($data, $c) = _post(1, $call, $req);
+	return ($data, $c);
+}
+sub post2 {
+	my ($call,$req,$cb) = @_;
+	my ($data, $c) = _post(2, $call, $req, $cb);
+	return ($data, $c);
+}
+sub _post {
+	my ($rev, $call,$req,$cb) = @_;
+	my $payload = { };
+	$payload->{"-to_json"} = $req;
+	if ($v>0) {
+		print "$call payload = ".Dumper($payload);
+	}
+	my ($data, $c) = _call($rev, "post", $call, $payload, $cb);
+	if ($v>0) {
+		print Dumper(($data,$c));
+	}
+	return ($data,$c);
+}
+sub delete2 {
+	my ($call,$req) = @_;
+	my ($data, $c) = _call(2, "delete", $call);
+	return ($data, $c);
+}
+
+
 sub _call {
-	my ($ver, $type, $query, $pdata) = @_;
+	my ($ver, $type, $query, $pdata, $callback) = @_;
 	if ($v>0) {
 		print "v$ver $type query=${query}\n";
 	}
 	my $name = $query;
 	$name =~ s/\?.*$//;
 	$name =~ s/\/[0-9]{1,}/\/:id/;
+	my $callit = 0;
 	my ($data, $c);
+
+	my $legit = 0;
+	for my $t (("get","post","delete")) {
+		if ($t eq $type) {
+			$legit++;
+			last;
+		}
+	}
+	if ($legit < 1) {
+		diestat("_call($ver, '${type}', $query): unhandled type");
+	}
 
 	# XXX once limits are cached (fs or db), we can be 'smart' and
 	#     wait before we get an error.  For now, react to errors.
 
-	if ($type eq "get") {
-		_retry_get:
-		eval {
-			($data, $c) = $client->{$ver}->request($type => $query);
-		};
-		my $lc = $client->{$ver}->{_last_context};
-		if ($v>0) {
-			print "data: ".Dumper($data);
-			print "c: ".Dumper($c);
-			print "client->lastcontext: ".Dumper($lc)."\n";
-		}
-		if (!defined $c && defined $lc) {
-			$c = $lc;
-		}
-		my $lims;
+	_redo_action:
+	$callit = 0;
+	eval {
+		($data, $c) = $client->{$ver}->request($type => $query, $pdata);
+	};
+	$c //= $client->{$ver}->{_last_context};
+	if ($v>0) {
+		print "data: ".Dumper($data)."\n";
+		print "c: ".Dumper($c)."\n";
+	}
+	my $lims;
+	if (defined $c) {
+		$lims = parse_limits($c);
+		my $name = $query;
+		$name =~ s/\?.*$//;
+		$name =~ s/\/[0-9]{1,}/:id/;
+		show_limits($name, $lims);
+	}
+	if ($c->{result}->{status} ne "200") {
 		if (defined $c) {
-			$lims = parse_limits($c);
-			show_limits($name, $lims);
+			print "eval error 'bout to check limits\n";
+			if (check_limits($name, $lims)) {
+				goto _redo_action;
+			}
 		}
-		if ($@) {
-			if (defined $c) {
-				if (check_limits($name, $lims)) {
-					goto _retry_get;
-				}
-			}
-			if (defined($data) && $v>0) {
-				print Dumper($data);
-			}
+		print "if callback...\n";
+		if (!defined $callback) {
+			print "no callback, die\n";
 			diestat(sprintf("_call($ver,$type,$query):\n%s",$@));
 		}
-		return ($data, $c);
+		print "Actually calling callback...\n";
+		($data, $c) = $callback->($ver,$type,$query,$pdata,$c);
 	}
-	if ($type eq "post") {
-		_retry_post:
-		if ($skipeval > 0) {
-			($data, $c) = $client->{$ver}->request($type => $query, $pdata);
-		} else {
-			eval {
-			($data, $c) = $client->{$ver}->request($type => $query, $pdata);
-			};
-		}
-		my $lc = $client->{$ver}->{_last_context};
-		if ($v>0) {
-			print "data: ".Dumper($data)."\n";
-			print "c: ".Dumper($c)."\n";
-			print "client->lastcontext: ".Dumper($client->{$ver}->{_last_context})."\n";
-		}
-		if (!defined $c && defined $lc) {
-			$c = $lc;
-		}
-		my $lims;
-		if (defined $c) {
-			$lims = parse_limits($c);
-			my $name = $query;
-			$name =~ s/\?.*$//;
-			$name =~ s/\/[0-9]{1,}/:id/;
-			show_limits($name, $lims);
-		}
-		if ($@) {
-			if (defined $c) {
-				if (check_limits($name, $lims)) {
-					goto _retry_post;
-				}
-			}
-			diestat(sprintf("_call($ver,$type,$query):\n%s",$@));
-		}
-		return ($data, $c);
-	}
-	if ($type eq "delete") {
-		_retry_delete:
-		eval {
-			#($data, $c) = $client->{$ver}->delete($query);
-			($data, $c) = $client->{$ver}->request(delete => $query, $pdata);
-		};
-		my $lc = $client->{$ver}->{_last_context};
-		if ($v>0) {
-			print "data: ".Dumper($data);
-			print "c: ".Dumper($c);
-			print "client->lastcontext: ".Dumper($lc)."\n";
-		}
-		if (!defined $c && defined $lc) {
-			$c = $lc;
-		}
-		my $lims;
-		if (defined $c) {
-			$lims = parse_limits($c);
-			show_limits($name, $lims);
-		}
-		if ($@) {
-			if (defined $c) {
-				if (check_limits($name, $lims)) {
-					goto _retry_delete;
-				}
-			}
-			if (defined($data) && $v>0) {
-				print Dumper($data);
-			}
-			diestat(sprintf("_call($ver,$type,$query):\n%s",$@));
-		}
-		return ($data, $c);
-	}
-			
-	diestat("_call($ver, '${type}', $query): unhandled type");
+	return ($data, $c);
 }
 
 sub wait_till {
