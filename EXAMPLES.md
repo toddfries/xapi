@@ -43,6 +43,7 @@ xposts -T :postid
 xposts -j "posts/1732923352?tweet.fields=community_id"
 
 # show followers
+# !free
 xposts -j "users/218538224/followers?user.fields=id,location,public_metrics,subscription_type,verified,verified_type&tweet.fields=id,media_metadata,organic_metrics,public_metrics,scopes,source"
 
 # show owned lists
@@ -69,3 +70,6 @@ xposts -p "lists/1733137040718360773"
 # try 20241130 or later
 xposts -j "lists/1733137040718360773;id=1733137040718360773;private=true"
 
+# delete a post
+# free, 17/24h
+xposts -a delete posts/1868694921458385046
