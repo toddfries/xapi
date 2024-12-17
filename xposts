@@ -1036,7 +1036,6 @@ sub _call {
 	my $name = $query;
 	$name =~ s/\?.*$//;
 	$name =~ s/\/[0-9]{1,}/\/:id/;
-	my $callit = 0;
 	my ($data, $c);
 
 	my $legit = 0;
@@ -1054,7 +1053,6 @@ sub _call {
 	#     wait before we get an error.  For now, react to errors.
 
 	_redo_action:
-	$callit = 0;
 	eval {
 		($data, $c) = $client->{$ver}->request($type => $query, $pdata);
 	};
@@ -1071,12 +1069,10 @@ sub _call {
 		$name =~ s/\/[0-9]{1,}/:id/;
 		show_limits($name, $lims);
 	}
-	if ($c->{result}->{status} ne "200") {
-		if (defined $c) {
-			print "eval error 'bout to check limits\n";
-			if (check_limits($name, $lims)) {
-				goto _redo_action;
-			}
+	if (! $c->{http_response}->is_success) {
+		print "eval error 'bout to check limits\n";
+		if (check_limits($name, $lims)) {
+			goto _redo_action;
 		}
 		print "if callback...\n";
 		if (!defined $callback) {
@@ -1516,6 +1512,7 @@ sub check_limits {
 		}
 	}
 	if ($wait > 0) {
+		printf "%s ", $name;
 		wait_till($wait);
 		return 1;
 	}
