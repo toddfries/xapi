@@ -34,7 +34,7 @@ use Digest::SHA1 qw(sha1_hex);
 use Graphics::Magick;
 use File::MMagic;
 
-$Data::Dumper::Indent = 1;
+$Data::Dumper::Indent = 2;
 $Data::Dumper::Purity = 1;
 $Data::Dumper::Deepcopy = 1;
 $Data::Dumper::Sortkeys = 1;
@@ -439,7 +439,7 @@ if ($v > 0) {
 	$shown = 0;
 }
 if (!defined($posts)) {
-	diestat("posts for $id returned undef");
+	die("posts for $id returned undef");
 }
 if (!defined($opt_q)) {
 	print expand_tweet(0, $posts);
@@ -574,15 +574,15 @@ sub getuser_byname {
 	# cache the who -> id somewhere persistent to reduce api calls
 	my ($res,$c) = get2("users/by/username/$who");
 	if (!defined($res)) {
-		diestat("empty result querying $who");
+		die("empty result querying $who");
 	}
 	$data = $res->{data};
 	if (!defined($data)) {
-		diestat("empty data ".Dumper($res));
+		die("empty data ".Dumper($res));
 	}
 	if (!defined($data->{id})) {
 		print "ENOID: ";
-		diestat(Dumper($data));
+		die(Dumper($data));
 	}
 	if ($v>0) {
 		print Dumper($data);
@@ -638,7 +638,7 @@ sub expand_tweet {
 		umcache_write($user);
 	}
 	for my $post ( @{ $posts->{includes}->{tweets} } ) {
-		#diestat(" post: ". Dumper($post));
+		#die(" post: ". Dumper($post));
 		my $tid = $post->{id};
 
 		for my $var (%{ $post }) {
@@ -837,11 +837,11 @@ sub show_ustats {
 
 	my ($res,$c) = get2("users/$id$xtra");
 	if (!defined($res)) {
-		diestat("empty result querying $handle");
+		die("empty result querying $handle");
 	}
 	$data = $res->{data};
 	if (!defined($data)) {
-		diestat("empty data ".Dumper($res));
+		die("empty data ".Dumper($res));
 	}
 	my $verify;
 	if ($data->{verified}) {
@@ -980,14 +980,6 @@ sub show_bookmarks {
 	print "bookmarks: ", Dumper($data), "\n\n";
 }
 
-sub diestat {
-	my ($string) = @_;
-
-	print STDERR $string;
-	print STDERR "\n";
-	exit(1);
-}
-
 sub get1 {
 	my ($call) = @_;
 	my ($data, $c) = _call(1, "get", $call);
@@ -1046,7 +1038,7 @@ sub _call {
 		}
 	}
 	if ($legit < 1) {
-		diestat("_call($ver, '${type}', $query): unhandled type");
+		die("_call($ver, '${type}', $query): unhandled type");
 	}
 
 	# XXX once limits are cached (fs or db), we can be 'smart' and
@@ -1062,30 +1054,47 @@ sub _call {
 		print "c: ".Dumper($c)."\n";
 	}
 	my $lims;
-	if (defined $c) {
-		$lims = parse_limits($c);
-		my $name = $query;
-		$name =~ s/\?.*$//;
-		$name =~ s/\/[0-9]{1,}/:id/;
-		show_limits($name, $lims);
+	if (!defined $c) {
+		die("\$c is undef");
 	}
+	my $hdrs = parse_headers($c);
+	$lims = $hdrs->{lims};
+	show_limits($name, $lims);
 	if (! $c->{http_response}->is_success) {
-		print $c->{result}->{status}.": ";
-		print $c->{result}->{title}.": ";
-		print $c->{result}->{detail}."\n";
-		my $restype = $c->{result}->{type};
-		if (! ($restype =~ /^about:blank$/) ) {
-			print $c->{result}->{type}."\n";
+		my $content = $c->{http_response}->decoded_content;
+		my $data = $client->{$ver}->from_json($content);
+		if (!defined $data->{status}) {
+			print "data->{status} = undef, hmm. c: \n";
+			print Dumper($c);
+			die("_call status failure");
 		}
-		if ($c->{result}->{detail} eq "Too Many Requests") {
+		my $err = $data->{status};
+		$err .= ": ".$data->{title};
+		if ($data->{title} ne $data->{detail}) {
+			$err .= ": ".$data->{detail};
+		}
+		$err .= "\n";
+		my $restype = $data->{type};
+		if (! ($restype =~ /^about:blank$/) ) {
+			$err .= $c->{result}->{type}."\n";
+		}
+		if ($data->{detail} eq "Unauthorized") {
+			print $err;
+			foreach my $s (sort keys %{$hdrs->{stats}}) {
+				printf "\t%s = %s\n", $s, $hdrs->{stats}->{$s};
+			}
+			die("Auth failure");
+		}
+		if ($data->{detail} eq "Too Many Requests") {
 			if (check_limits($name, $lims)) {
 				goto _redo_action;
 			}
 		}
 		print "if callback...\n";
 		if (!defined $callback) {
+			print $err;
 			print "no callback, die\n";
-			diestat(sprintf("_call($ver,$type,$query):\n%s",$@));
+			die(sprintf("_call($ver,$type,$query):\n%s",$@));
 		}
 		print "Actually calling callback...\n";
 		($data, $c) = $callback->($ver,$type,$query,$pdata,$c);
@@ -1162,7 +1171,7 @@ sub file_to_mediaid {
 		}
 	}
 	if (!defined($mt)) {
-		diestat("file_to_mediaid($file) format='$format' unsupported");
+		die("file_to_mediaid($file) format='$format' unsupported");
 	}
 	my ($media_data) = $img->ImageToBlob();
 	my $encoded_image = encode_base64($media_data);
@@ -1179,7 +1188,7 @@ sub file_to_mediaid {
 		($data, $c) = $client->{1}->request(post => $query, $payload);
 	};
 	if ($@) {
-		diestat(sprintf("post1($query):\n%s",$@));
+		die(sprintf("post1($query):\n%s",$@));
 	}
 	#print "post.media.upload: data ".Dumper($data);
 	#print "post.media.upload: c ".Dumper($data);
@@ -1232,7 +1241,7 @@ sub check_vid_mime_type {
 		}
 	}
 
-	diestat("unknown: ${mime_type}");
+	die("unknown: ${mime_type}");
 }
 sub video_to_mediaid {
 	my ($file) = @_;
@@ -1282,7 +1291,7 @@ sub chunk_init {
 		($data, $c) = $client->{1}->request(post => $query, $payload);
 	};
 	if ($@) {
-		diestat(sprintf("chunk_init: client->{1}($query, { media_type => $type, total_bytes => $size }: %s",$@));
+		die(sprintf("chunk_init: client->{1}($query, { media_type => $type, total_bytes => $size }: %s",$@));
 	}
 	return $data;
 }
@@ -1302,7 +1311,7 @@ sub chunk_append {
 		($data, $c) = $client->{1}->request(post => $query, $payload);
 	};
 	if ($@) {
-		diestat(sprintf("chunk_append: client->{1}($query, { media_id => $mid, segment_index => ${chunk_num} }: %s",$@));
+		die(sprintf("chunk_append: client->{1}($query, { media_id => $mid, segment_index => ${chunk_num} }: %s",$@));
 	}
 	return $data;
 }
@@ -1319,7 +1328,7 @@ sub chunk_finalize {
 		($data, $c) = $client->{1}->request(post => $query, $payload);
 	};
 	if ($@) {
-		diestat(sprintf("chunk_finalize: client->{1}($query, { media_id => $mid }: %s",$@));
+		die(sprintf("chunk_finalize: client->{1}($query, { media_id => $mid }: %s",$@));
 	}
 	#print "video_to_mediaid: finalize cdata ".Dumper($data);
 	return $data;
@@ -1351,7 +1360,7 @@ sub chunk_check_status {
 				$data->{'processing_info'}->{'check_after_secs'},
 				$@
 			);
-			diestat($msg);
+			die($msg);
 		}
 		$pi = $data->{'processing_info'};
 		if ($pi->{state} =~ /^(failed|succeeded)/) {
@@ -1461,10 +1470,11 @@ sub read_from_cache {
 	}
 	return $data;
 }
-sub parse_limits {
+sub parse_headers {
 	my ($c) = @_;
 
 	my $lims = { };
+	my $stats = { };
 	if ($v>0) {
 		print STDERR "Headers:\n";
 	}
@@ -1481,15 +1491,24 @@ sub parse_limits {
 				printf STDERR "\t.. %s .. %s\n", $lim, $ltype;
 			}
 			$lims->{$lim}->{$ltype} = $val;
+			next;
+		}
+		if ($h =~ /^(x-(con|res|tran)|cont|date|server)/i) {
+			$stats->{$h} = $val;
+			next;
 		}
 		if ($v>0) {
-			printf STDERR "\t%s = '%s'\n", $h, $resp->header($h);
+			printf STDERR "\t!header handled: %s = '%s'\n", $h, $resp->header($h);
 		}
 	}
 	if ($v>0) {
 		print STDERR "\n";
 	}
-	return $lims;
+	my $tmp = {
+		lims => $lims,
+		stats => $stats,
+	};
+	return $tmp;
 }
 sub check_limits {
 	my ($name, $lims) = @_;
