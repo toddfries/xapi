@@ -24,8 +24,15 @@ use Data::Dumper;
 use X::API;
 use ReadConf;
 
+my $conf_file = "xapi.conf";
+my $confdir = $ENV{HOME}."/.config/xapi";
+if (defined $ARGV[1] && -f $confdir."/".$ARGV[1]) {
+	$conf_file = $ARGV[1];
+}
+my $conf_path = $confdir."/".$conf_file;
+
 my $rc = ReadConf->new();
-my $conf = $rc->readconf($ENV{HOME}."/.config/xapi/xapi.conf");
+my $conf = $rc->readconf($conf_path);
 
 my $c = $conf->{creds};
 
