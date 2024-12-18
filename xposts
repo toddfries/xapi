@@ -29,7 +29,7 @@ use Sys::Syslog;
 use X::API;
 use JSON;
 use MIME::Base64;
-use Storable;
+use Storable qw(freeze thaw);
 use Digest::SHA1 qw(sha1_hex);
 use Graphics::Magick;
 use File::MMagic;
@@ -314,14 +314,12 @@ if (defined($opt_w)) {
 	#print "uinfo: ".Dumper($uinfo);
 	# see json/uinfo.json
 
-	if ($v>0) {
-		print "POST v2 tweets .. payload: \n";
-		print Dumper($req);
-	}
 	my ($data, $c) = post2($query, $req, sub {
 		my ($ver, $type, $call, $pdata, $c) = @_;
-		print "sub ($ver,$type,$call,$pdata,...) starting\n";
+		printf "sub ($ver,$type,$call,%s, %s) starting\n", ref($pdata), ref($c);
 		my $req = $pdata->{'-to_json'};
+		print "cb pdata: ".Dumper($pdata);
+		print "cb   req: ".Dumper($req);
 		my $cid = $req->{"community_id"};
 		if (defined $cid) {
 			if ($v>0) {
@@ -335,7 +333,6 @@ if (defined($opt_w)) {
 			}
 			return (undef, undef);
 		}
-		#if ($c->{result}->{status} == 403 && $c->{result}->{detail} =~ /not permitted to create a non Community/) {
 		print "sub get2(posts/${opt_W}?tweet.fields=community_id\n";
 		my $data;
 		($data, $c) = get2("posts/${opt_W}?tweet.fields=community_id");
@@ -1005,7 +1002,7 @@ sub _post {
 	my $payload = { };
 	$payload->{"-to_json"} = $req;
 	if ($v>0) {
-		print "$call payload = ".Dumper($payload);
+		print "_post payload = ".Dumper($payload);
 	}
 	my ($data, $c) = _call($rev, "post", $call, $payload, $cb);
 	if ($v>0) {
@@ -1024,6 +1021,9 @@ sub _call {
 	my ($ver, $type, $query, $pdata, $callback) = @_;
 	if ($v>0) {
 		print "v$ver $type query=${query}\n";
+		if ($type eq "post") {
+			print "   payload: ".Dumper($pdata);
+		}
 	}
 	my $name = $query;
 	$name =~ s/\?.*$//;
@@ -1031,7 +1031,7 @@ sub _call {
 	my ($data, $c);
 
 	my $legit = 0;
-	for my $t (("get","post","delete")) {
+	for my $t (("get","post","delete","head")) {
 		if ($t eq $type) {
 			$legit++;
 			last;
@@ -1044,76 +1044,103 @@ sub _call {
 	# XXX once limits are cached (fs or db), we can be 'smart' and
 	#     wait before we get an error.  For now, react to errors.
 
+	my $savedata = thaw(freeze({ data=> $pdata }));
 	_redo_action:
 	eval {
 		($data, $c) = $client->{$ver}->request($type => $query, $pdata);
 	};
+	$pdata = $savedata->{data};
+	if ($v>0 && $type eq "post") {
+		print "   pdata after request: ".Dumper($pdata);
+	}
 	$c //= $client->{$ver}->{_last_context};
 	if ($v>0) {
 		print "data: ".Dumper($data)."\n";
 		print "c: ".Dumper($c)."\n";
 	}
-	my $lims;
 	if (!defined $c) {
 		die("\$c is undef");
 	}
 	my $hdrs = parse_headers($c);
-	$lims = $hdrs->{lims};
-	show_limits($name, $lims);
+	show_limits($name, $hdrs->{lims});
 	if (! $c->{http_response}->is_success) {
 		my $content = $c->{http_response}->decoded_content;
 		my $data = $client->{$ver}->from_json($content);
-		if (!defined $data->{status}) {
-			print "data->{status} = undef, hmm. c: \n";
+		if (!defined $data) {
+			print "data = undef, hmm. c: \n";
 			print Dumper($c);
 			die("_call status failure");
 		}
-		my $err = $data->{status};
-		$err .= ": ".$data->{title};
+		my $err = "";
+		if (defined $data->{status}) {
+			$err .= $data->{status};
+		} else {
+			$err .= "???";
+		}
+		if (defined $data->{title}) {
+			$err .= ": ".$data->{title};
+		}
 		if ($data->{title} ne $data->{detail}) {
 			$err .= ": ".$data->{detail};
 		}
+		if (defined $data->{errors}) {
+			foreach my $iter (sort @{ $data->{errors} }) {
+				foreach my $ename (sort keys %{ $iter }) {
+					$err .= ": error.$ename = ".$iter->{$ename};
+				}
+			}
+		}
+		if (defined $data->{type} && $data->{type} ne "about:blank") {
+			$err .= "\n      ".$data->{type};
+		}
 		$err .= "\n";
-		my $restype = $data->{type};
-		if (! ($restype =~ /^about:blank$/) ) {
-			$err .= $c->{result}->{type}."\n";
+		my $estat = "";
+		if ($v>0) {
+			foreach my $s (sort keys %{$hdrs->{stats}}) {
+				$estat .= sprintf "\t%s = %s\n", $s, $hdrs->{stats}->{$s};
+			}
+			$estat .= "\n";
 		}
 		if ($data->{detail} eq "Unauthorized") {
-			print $err;
-			foreach my $s (sort keys %{$hdrs->{stats}}) {
-				printf "\t%s = %s\n", $s, $hdrs->{stats}->{$s};
-			}
+			print STDERR $err.$estat;
 			die("Auth failure");
 		}
 		if ($data->{detail} eq "Too Many Requests") {
-			if (check_limits($name, $lims)) {
+			print STDERR $err.$estat;
+			if (check_limits($name, $hdrs->{lims})) {
 				goto _redo_action;
 			}
 		}
-		print "if callback...\n";
-		if (!defined $callback) {
-			print $err;
-			print "no callback, die\n";
-			die(sprintf("_call($ver,$type,$query):\n%s",$@));
+		if ($data->{status} eq "403" && $data->{title} eq "Forbidden") {
+			if (! (defined $callback && $data->{detail} =~ /not permitted to create a non Community/)) {
+				print STDERR $err.$estat;
+				die("You have hit a wall.  You have hit a wall.");
+			}
+			print "if callback...\n";
+			print STDERR $err.$estat;
+			print "Actually calling callback...\n";
+			print "sending pdata to callback: ".Dumper($pdata);
+			($data, $c) = $callback->($ver,$type,$query,$pdata,$c);
+		} else {
+			print STDERR $err.$estat;
+			die("Today is a good day to die.");
 		}
-		print "Actually calling callback...\n";
-		($data, $c) = $callback->($ver,$type,$query,$pdata,$c);
 	}
 	return ($data, $c);
 }
 
 sub wait_till {
-	my ($reset) = @_;
+	my ($name, $reset) = @_;
 
 	my $now = strftime( "%s", localtime());
 	my $res = strftime( "%s", localtime($reset));
 	my $rhu = strftime( "%Y%m%d %H:%M:%S", localtime($reset));
 	if ($res <= $now) {
-		printf STDERR "wait_till(%ds) <= %s, returning\n",
-			$res - $now, $rhu;
+		printf STDERR "%s: wait_till(%ds) <= %s, returning\n",
+			$name, $res - $now, $rhu;
 		return;
 	}
-	printf STDERR "\nwait_till waiting %ds until %s", $res - $now, $rhu;
+	printf STDERR "\n%s: wait_till waiting %ds until %s", $name, $res - $now, $rhu;
 	sleep($res - $now); # should we +1 to not be too fast?
 	printf STDERR " done.\n";
 }
@@ -1434,7 +1461,7 @@ sub write_to_cache {
 		print "Cache write $filename ($key)\n";
 	}
 	open my $fh, '>', $filename or die "Could not open file '$filename': $!";
-	print $fh Storable::nfreeze($data);
+	print $fh freeze($data);
 	close $fh;
 }
 sub read_from_cache {
@@ -1463,7 +1490,7 @@ sub read_from_cache {
 		print "Cache read $filename ($key)\n";
 	}
 	local $/ = undef;  # Read the entire file at once
-	my $data = Storable::thaw(<$fh>);
+	my $data = thaw(<$fh>);
 	close $fh;
 	if ($v>0) {
 		print "read_from_cache($key) success!\n";
@@ -1493,7 +1520,7 @@ sub parse_headers {
 			$lims->{$lim}->{$ltype} = $val;
 			next;
 		}
-		if ($h =~ /^(x-(con|res|tran)|cont|date|server)/i) {
+		if ($h =~ /^(x-(con|res|tran|acc)|cont|date|server|api)/i) {
 			$stats->{$h} = $val;
 			next;
 		}
@@ -1540,8 +1567,7 @@ sub check_limits {
 		}
 	}
 	if ($wait > 0) {
-		printf "%s ", $name;
-		wait_till($wait);
+		wait_till($name, $wait);
 		return 1;
 	}
 	return 0;
