@@ -1070,9 +1070,17 @@ sub _call {
 		show_limits($name, $lims);
 	}
 	if (! $c->{http_response}->is_success) {
-		print "eval error 'bout to check limits\n";
-		if (check_limits($name, $lims)) {
-			goto _redo_action;
+		print $c->{result}->{status}.": ";
+		print $c->{result}->{title}.": ";
+		print $c->{result}->{detail}."\n";
+		my $restype = $c->{result}->{type};
+		if (! ($restype =~ /^about:blank$/) ) {
+			print $c->{result}->{type}."\n";
+		}
+		if ($c->{result}->{detail} eq "Too Many Requests") {
+			if (check_limits($name, $lims)) {
+				goto _redo_action;
+			}
 		}
 		print "if callback...\n";
 		if (!defined $callback) {
@@ -1092,7 +1100,8 @@ sub wait_till {
 	my $res = strftime( "%s", localtime($reset));
 	my $rhu = strftime( "%Y%m%d %H:%M:%S", localtime($reset));
 	if ($res <= $now) {
-		printf STDERR "wait_till(%s) <= %s, returning\n";
+		printf STDERR "wait_till(%ds) <= %s, returning\n",
+			$res - $now, $rhu;
 		return;
 	}
 	printf STDERR "\nwait_till waiting %ds until %s", $res - $now, $rhu;
