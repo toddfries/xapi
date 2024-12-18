@@ -1111,7 +1111,7 @@ sub _call {
 				goto _redo_action;
 			}
 		}
-		if ($data->{status} eq "403" && $data->{title} eq "Forbidden") {
+		if ($data->{status} eq "403" && defined $data->{title} && $data->{title} eq "Forbidden") {
 			if (! (defined $callback && $data->{detail} =~ /not permitted to create a non Community/)) {
 				print STDERR $err.$estat;
 				die("You have hit a wall.  You have hit a wall.");
