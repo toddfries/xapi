@@ -248,6 +248,16 @@ if (defined($opt_a)) {
 		print Dumper($data);
 		exit(0);
 	}
+	if ($opt_a eq "get2") {
+		my ($data, $c) = get2( $ARGV[0] );
+		print Dumper($data);
+		exit(0);
+	}
+	if ($opt_a eq "get1") {
+		my ($data, $c) = get1( $ARGV[0] );
+		print Dumper($data);
+		exit(0);
+	}
 	die "unknown action ${opt_a}";
 }
 if (defined($opt_w)) {
@@ -1111,20 +1121,20 @@ sub _call {
 				goto _redo_action;
 			}
 		}
-		if ($data->{status} eq "403" && defined $data->{title} && $data->{title} eq "Forbidden") {
-			if (! (defined $callback && $data->{detail} =~ /not permitted to create a non Community/)) {
+		if (defined $data->{status} && defined $data->{title} &&
+			$data->{status} eq "403" && $data->{title} eq "Forbidden") {
+			if (! (defined $callback && defined $data->{detail} &&
+				$data->{detail} =~ /not permitted to create a non Community/) ) {
 				print STDERR $err.$estat;
 				die("You have hit a wall.  You have hit a wall.");
 			}
-			print "if callback...\n";
 			print STDERR $err.$estat;
-			print "Actually calling callback...\n";
-			print "sending pdata to callback: ".Dumper($pdata);
+			print "Callback .. to populate missing community_id\n";
 			($data, $c) = $callback->($ver,$type,$query,$pdata,$c);
-		} else {
-			print STDERR $err.$estat;
-			die("Today is a good day to die.");
+			return ($data, $c);
 		}
+		print STDERR $err.$estat;
+		die("Today is a good day to die.");
 	}
 	return ($data, $c);
 }
