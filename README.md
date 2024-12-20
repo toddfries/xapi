@@ -1,6 +1,6 @@
 lets play with the 𝕏 api
 
-Go get a deveoper key/secret, put in a conf file like so:
+Go get a deveoper key/secret + access token/secret at https://developer.twitter.com/en/portal/dashboard, put in a conf file like so:
 
 ```
 $ mkdir -p $HOME/.config/xapi
@@ -8,23 +8,11 @@ $ cat <<EOF > $HOME/.config/xapi/xapi.conf
 [creds]
 consumer_key = <consumer_key>
 consumer_secret = <consumer_secret>
-EOF
-```
-
-Now get the access token and secret:
-
-```
-$ oauth
-Authorize this application at: https://api.twitter.com/oauth/authorize?oauth_token=..magic..autogen..string..
-Then, enter the returned PIN number displayed in the browser: <pincode from browser>
-
-access_token.......: <access_token>
-access_token_secret: <access_token_secret>
-...
-$ cat <<EOF >> $HOME/.config/xapi/xapi.conf
 access_token = <access_token>
 access_token_secret = <access_token_secret>
 EOF
+```
+
 $ xposts unix2mars
 ...
 0 2022-07-13T20:33:03.000Z @unix2mars RT Another level nested again. (1547318208583143425, Re 1547318135841226753)
@@ -49,7 +37,7 @@ With 'xposts' this currently looks like:
 
  # must be the user granting the key
   xposts -s username
-  xposts -j users/me
+  xposts -a get2 users/me
   xposts -w "hi there cli tweet"
    .. displays:
    https://x.com/username/status/12345
