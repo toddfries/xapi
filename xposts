@@ -506,33 +506,44 @@ sub uinfo {
 }
 
 sub getuser_byname {
-	my ($who) = @_;
+	my (@ppl) = @_;
 
-	my $data = cache_read('u',$who);
-	if (defined($data)) {
-		#print "ucache hit  ".$data->{id}."\n";
-		return $data;
+	my @ppldata;
+	my @pplget;
+	foreach my $who (@ppl) {
+		my $data = cache_read('u',$who);
+		if (defined($data)) {
+			#print "ucache hit  ".$data->{id}."\n";
+			push @ppldata, $data;
+			next;
+		}
+		push @pplget, $who;
+	}
+	if ($#ppl == $#ppldata) {
+		return @ppldata;
 	}
 
-	# cache the who -> id somewhere persistent to reduce api calls
-	my ($res,$c) = get2("users/by/username/$who");
-	if (!defined($res)) {
-		die("empty result querying $who");
+	foreach my $who (@pplget) {
+		my ($res,$c) = get2("users/by/username/$who");
+		if (!defined($res)) {
+			die("empty result querying $who");
+		}
+		$data = $res->{data};
+		if (!defined($data)) {
+			die("empty data ".Dumper($res));
+		}
+		if (!defined($data->{id})) {
+			print "ENOID: ";
+			die(Dumper($data));
+		}
+		if ($v>0) {
+			print Dumper($data);
+		}
+		umcache_write($data);
+		push @ppldata, $data;
 	}
-	$data = $res->{data};
-	if (!defined($data)) {
-		die("empty data ".Dumper($res));
-	}
-	if (!defined($data->{id})) {
-		print "ENOID: ";
-		die(Dumper($data));
-	}
-	if ($v>0) {
-		print Dumper($data);
-	}
-	umcache_write($data);
 
-	return $data;
+	return @ppldata;
 }
 sub getuser_byid {
 	my ($id) = @_;
@@ -839,13 +850,14 @@ sub show_mystats {
 	if (defined($me) && $v > 0) {
 		print Dumper($me);
 	}
+	my $uinfo = uinfo();
 	my $favs = $me->{favourites_count};
 	my $friends = $me->{friends_count};
 	my $statuses = $me->{statuses_count};
 	my $followers = $me->{followers_count};
 	my $listed = $me->{listed_count};
 	my $screen_name = $me->{screen_name};
-	my $id = uinfo->{id};
+	my $id = $uinfo->{d};
 	my $verified = uinfo()->{verified};
 	my $verified_type = uinfo()->{verified_type};
 	my $subscription_type = uinfo()->{subscription_type};
