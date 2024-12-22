@@ -59,6 +59,7 @@ if (! -d $cachedir) {
 #   .. the program actually dies
 #   .. want to see if post replies die, then query the community_id incase thats why
 our $skipeval = 0;
+our @followq;
 
 our $fields = { }; # ->{p} = post, ->{u} = user
 init_fields();
@@ -1593,4 +1594,131 @@ sub show_limits {
 			$lims->{$lim}->{limit},
 			$timestamp->printf("%Y%m%d %H:%M:%S");
 	}
+}
+
+sub xpost {
+	my ($msg) = @_;
+	my $query = "posts";
+	my $name = $query;
+	my $req = {
+			text => $msg,
+	};
+	if (defined($opt_W)) {
+		my $reply = {
+			"in_reply_to_tweet_id" => $opt_W,
+		};
+		$req->{"reply"} = $reply;
+	} elsif (defined($opt_Q)) {
+		$req->{"quote_tweet_id"} = $opt_Q;
+	}
+	if (defined($opt_C)) {
+		$req->{"community_id"} = $opt_C;
+	}
+	if (defined($opt_R)) {
+		$req->{"reply_settings"} = $opt_R;
+	}
+	# $opt_I syntax:
+	# <img> = foo.jpg[="alternate text"]
+	# list = <img>[,<img>...]
+	# 
+	if (defined($opt_I)) {
+		my @ids;
+		my ($mdata, $mstr, $mid);
+		for my $img (split(/,/, $opt_I)) {
+			my ($f,$txt)=split(/=/,$img);
+			if ($f =~ /^[0-9]+$/) {
+				$mid = $f;
+			} else {
+				$mdata = file_to_mediaid( $f );
+				$mid = $mdata->{media_id};
+			}
+			$mstr = sprintf("%s", $mid);
+			if ($v>0) {
+				printf " media_id %s from %s\n", $mstr, $f;
+			}
+			push @ids, $mstr;
+			# XXX make conditional
+			if (defined($txt)) {
+				set_alt_text( $mid, $txt );
+			}
+		}
+		my $media = {
+			media_ids => [ @ids ],
+		};
+		$req->{media} = $media;
+	}
+	# $req->{for_super_followers_only} = "true";
+	# $req->{reply_settings} = "mentionedUsers";
+	# $req->{geo} = $geoobj; ?
+	# $req->{geo}->{place_id} = $geo_place_id;
+
+	# media | poll | quote
+	# $req->{poll} = $poll;
+
+	my $uinfo = uinfo();
+	my $uname = $uinfo->{username};
+	#print "uinfo: ".Dumper($uinfo);
+	# see json/uinfo.json
+
+	my ($data, $c) = post2($query, $req, sub {
+		my ($ver, $type, $call, $pdata, $c) = @_;
+		printf "sub ($ver,$type,$call,%s, %s) starting\n", ref($pdata), ref($c);
+		my $req = $pdata->{'-to_json'};
+		print "cb pdata: ".Dumper($pdata);
+		print "cb   req: ".Dumper($req);
+		my $cid = $req->{"community_id"};
+		if (defined $cid) {
+			if ($v>0) {
+				print "cid=$cid oops\n";
+			}
+			return (undef, undef);
+		}
+		if (!defined $opt_W) {
+			if ($v>0) {
+				print "opt_W=undef oops\n";
+			}
+			return (undef, undef);
+		}
+		print "sub get2(posts/${opt_W}?tweet.fields=community_id\n";
+		my $data;
+		($data, $c) = get2("posts/${opt_W}?tweet.fields=community_id");
+		$cid = $data->{data}->{community_id};
+		if (!defined $cid) {
+			printf "No cid for $opt_W\n";
+			sleep(1);
+			return (undef, undef);
+		}
+		$req->{"community_id"} = $cid;
+		($data, $c) = post2($query, $req);
+		return ($data, $c);
+	});
+
+	my $postid = $data->{data}->{id};
+	my $txt = $data->{data}->{text};
+	print "https://x.com/${uname}/status/${postid} \"${txt}\"\n";
+	#print "post.posts.<msg> c: ".Dumper($c);
+	# see json/post.tweets.msg.json
+}
+
+sub qfollow {
+	my ($user) = @_;
+
+	if ($user =~ /^[0-9]+$/) {
+		qfollowid($user);
+		return;
+	}
+	$user =~ s/^\@//;
+	push @followq, $user;
+}
+
+sub qfollowid {
+	my ($id) = @_;
+
+	my $uid = uinfo()->{id};
+
+	my $req = {
+		target_user_id => $id,
+	};
+	my ($data, $c) = post2("users/${uid}/following", $req);
+	print "qfollowid ret: ".Dumper($c);
 }
