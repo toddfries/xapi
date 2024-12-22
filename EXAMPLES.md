@@ -39,7 +39,7 @@ xposts -S unix2mars elonmusk
 xposts -L Scobleizer
 
 # arbitrary v2 post
-xposts -p "dm_conversations/with/218538224/messages;text=HelloWorld"
+xposts -a post2 "dm_conversations/with/218538224/messages;text=HelloWorld"
 
 # add a bookmark
 xposts -B :postid
@@ -52,6 +52,10 @@ xposts -a get2 "posts/1732923352?tweet.fields=community_id"
 # show followers
 # !free
 xposts -a get2 "users/218538224/followers?user.fields=id,location,public_metrics,subscription_type,verified,verified_type&tweet.fields=id,media_metadata,organic_metrics,public_metrics,scopes,source"
+
+# add followers
+#
+xposts -a post2 "users/218538224/following;target_user_id=23456""
 
 # show owned lists
 # free, rate 1/24h
@@ -67,11 +71,11 @@ xposts -a get2 "lists/1616593562979778562/members"
 
 # add member to list
 # free, 1/15m
-xposts -p "lists/1733137040718360773/members;user_id=1312511"
+xposts -a post2 "lists/1733137040718360773/members;user_id=1312511"
 
 # look up a list
 # !free
-xposts -p "lists/1733137040718360773"
+xposts -a post2 "lists/1733137040718360773"
 
 # set a list private
 # try 20241130 or later
