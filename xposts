@@ -259,6 +259,42 @@ if (defined($opt_a)) {
 		print Dumper($data);
 		exit(0);
 	}
+	if ($opt_a eq "post2") {
+		my ($call,@payloads) = split(/;/,$ARGV[0]);
+		my $req = { };
+		for my $part ( @payloads ) {
+			my ($var,$val) = split(/=/,$part);
+			$req->{$var} = $val;
+		}
+		my ($data, $c) = post2($call,$req);
+		exit(0);
+	}
+	if ($opt_a eq "post") {
+		xpost($ARGV[0]);
+		exit(0);
+	}
+	if ($opt_a eq "follow") {
+		for my $arg (@ARGV) {
+			for my $user (split(/[,; ]/, $arg)) {
+				qfollow($user);
+			}
+		}
+		for my $user (@followq) {
+			my $data = getuser_byname($user);
+			my $uid = $data->{id};
+			qfollowid($uid);
+		}
+		exit(0);
+	}
+	if ($opt_a eq "getuinfo") {
+		foreach my $user (@ARGV) {
+			my $data = getuser_byname($user);
+			print "getuser_byname res: $data\n";
+			exit(0);
+			my $uid = $data->{id};
+			qfollowid($uid);
+		}
+	}
 	die "unknown action ${opt_a}";
 }
 if (defined($opt_w)) {
