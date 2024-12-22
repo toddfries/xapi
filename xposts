@@ -280,20 +280,20 @@ if (defined($opt_a)) {
 			}
 		}
 		for my $user (@followq) {
-			my $data = getuser_byname($user);
-			my $uid = $data->{id};
-			qfollowid($uid);
+			my @list = getuser_byname($user);
+			for my $data (@list) {
+				my $uid = $data->{id};
+				qfollowid($uid);
+			}
 		}
 		exit(0);
 	}
 	if ($opt_a eq "getuinfo") {
-		foreach my $user (@ARGV) {
-			my $data = getuser_byname($user);
-			print "getuser_byname res: $data\n";
-			exit(0);
-			my $uid = $data->{id};
-			qfollowid($uid);
+		my @list = getuser_byname(@ARGV);
+		for my $data (@list) {
+			print "getuser_byname res: ".Dumper($data);
 		}
+		exit(0);
 	}
 	die "unknown action ${opt_a}";
 }
@@ -358,7 +358,8 @@ if ($opt_L>0) {
 	exit(0);
 }
 
-my $data = getuser_byname($who);
+my @list = getuser_byname($who);
+my $data = $list[0];
 my $id = $data->{id};
 
 
@@ -786,7 +787,8 @@ sub show_ustats {
 	if (defined $fields->{p}) {
 		$xtra .= "tweet.fields=".$fields->{p};
 	}
-	my $data = getuser_byname($handle);
+	my @list = getuser_byname($handle);
+	my $data = $list[0];
 	my $id = $data->{id};
 
 	my ($res,$c) = get2("users/$id$xtra");
@@ -911,7 +913,8 @@ sub show_owned_lists {
 	my ($handle) = @_;
 
 	my $data;
-	$data = getuser_byname($handle);
+	my @list = getuser_byname($handle);
+	$data = $list[0];
 	my $id = $data->{id};
 
 
@@ -1667,5 +1670,5 @@ sub qfollowid {
 		target_user_id => $id,
 	};
 	my ($data, $c) = post2("users/${uid}/following", $req);
-	print "qfollowid ret: ".Dumper($c);
+	printf "Follow: %s, Pending: %s\n", $data->{data}->{following}, $data->{data}->{pending_follow};
 }
