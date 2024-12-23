@@ -525,7 +525,7 @@ sub getuser_byname {
 	}
 
 	foreach my $who (@pplget) {
-		my ($res,$c) = get2("users/by/username/$who");
+		my ($res,$c) = get2("users/by/username/$who?user.fields=".$fields->{u});
 		if (!defined($res)) {
 			die("empty result querying $who");
 		}
@@ -1096,7 +1096,7 @@ sub wait_till {
 	my $now = strftime( "%s", localtime());
 	my $res = strftime( "%s", localtime($reset));
 	my $rhu = strftime( "%Y%m%d %H:%M:%S", localtime($reset));
-	my $sleeps = ($res - $now)*2;
+	my $sleeps = ($res - $now)*1.5;
 	my $stm = strftime( "%Y%m%d %H:%M:%S", localtime($now+$sleeps));
 	if ($res <= $now) {
 		printf STDERR "%s: wait_till(%ds) <= %s, returning\n",
