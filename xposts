@@ -980,12 +980,6 @@ sub delete2 {
 
 sub _call {
 	my ($ver, $type, $query, $pdata, $callback) = @_;
-	if ($v>0) {
-		print "v$ver $type query=${query}\n";
-		if ($type eq "post") {
-			print "   payload: ".Dumper($pdata);
-		}
-	}
 	my $name = $query;
 	$name =~ s/\?.*$//;
 	$name =~ s/\/[0-9]{1,}/\/:id/;
@@ -1007,6 +1001,12 @@ sub _call {
 
 	my $savedata = thaw(freeze({ data=> $pdata }));
 	_redo_action:
+	if ($v>0 || 1) {
+		printf "v$ver $type query=${query} @ %s\n", strftime( "%Y%m%d %H:%M:%S", localtime());
+		if ($type eq "post") {
+			print "   payload: ".Dumper($pdata);
+		}
+	}
 	eval {
 		($data, $c) = $client->{$ver}->request($type => $query, $pdata);
 	};
@@ -1096,13 +1096,15 @@ sub wait_till {
 	my $now = strftime( "%s", localtime());
 	my $res = strftime( "%s", localtime($reset));
 	my $rhu = strftime( "%Y%m%d %H:%M:%S", localtime($reset));
+	my $sleeps = ($res - $now)*2;
+	my $stm = strftime( "%Y%m%d %H:%M:%S", localtime($now+$sleeps));
 	if ($res <= $now) {
 		printf STDERR "%s: wait_till(%ds) <= %s, returning\n",
 			$name, $res - $now, $rhu;
 		return;
 	}
-	printf STDERR "\n%s: wait_till waiting %ds until %s", $name, $res - $now, $rhu;
-	sleep($res - $now); # should we +1 to not be too fast?
+	printf STDERR "\n%s: wait_till waiting %ds until %s, reset at %s", $name, $sleeps, $stm, $rhu;
+	sleep($sleeps); # should we +1 to not be too fast?
 	printf STDERR " done.\n";
 }
 
