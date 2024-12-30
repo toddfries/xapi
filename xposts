@@ -1003,7 +1003,7 @@ sub _call {
 	_redo_action:
 	if ($v>0 || 1) {
 		printf "v$ver $type query=${query} @ %s\n", strftime( "%Y%m%d %H:%M:%S", localtime());
-		if ($type eq "post") {
+		if ($type eq "post" && $v>0) {
 			print "   payload: ".Dumper($pdata);
 		}
 	}
