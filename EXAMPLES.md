@@ -53,6 +53,10 @@ xposts -a get2 "posts/1732923352?tweet.fields=community_id"
 # !free
 xposts -a get2 "users/218538224/followers?user.fields=id,location,public_metrics,subscription_type,verified,verified_type&tweet.fields=id,media_metadata,organic_metrics,public_metrics,scopes,source"
 
+# show following
+# !free
+xposts -a get2 "users/218538224/following?user.fields=id,location,public_metrics,subscription_type,verified,verified_type&tweet.fields=id,media_metadata,organic_metrics,public_metrics,scopes,source"
+
 # add followers
 #
 xposts -a post2 "users/218538224/following;target_user_id=23456""
