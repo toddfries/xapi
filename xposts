@@ -479,6 +479,7 @@ sub init_fields {
 	$fields->{u} .= "username,";
 	$fields->{u} .= "verified,";
 	$fields->{u} .= "verified_type,";
+	$fields->{u} .= "verified_followers_count,";
 	$fields->{u} .= "withheld";
 
 	# expansions=
@@ -750,9 +751,9 @@ sub expand_media {
 		if (defined($vc)) {
 			$returnstr .= sprintf "%s%25d views\n", $prestr, $vc;
 		}
-		for my $v ( @{ $media->{variants} } ) {
-			$v->{content_type} =~ s/application/app/;
-			my $bitrate = $v->{bit_rate};
+		for my $vr ( @{ $media->{variants} } ) {
+			$vr->{content_type} =~ s/application/app/;
+			my $bitrate = $vr->{bit_rate};
 			my $xtra = "";
 			if (defined($bitrate)) {
 				if ($bitrate > 0) {
@@ -761,7 +762,7 @@ sub expand_media {
 			}
 
 			$returnstr .= sprintf "%s%25s    %s%s\n", $prestr,
-			    $v->{content_type}, $v->{url}, $xtra;
+			    $vr->{content_type}, $vr->{url}, $xtra;
 		}
 		return $returnstr;
 	}
@@ -993,7 +994,7 @@ sub _call {
 		}
 	}
 	if ($legit < 1) {
-		die("_call($ver, '${type}', $query): unhandled type");
+		die(sprintf("_call($ver, '${type}', %s): unhandled type", $query));
 	}
 
 	# XXX once limits are cached (fs or db), we can be 'smart' and
@@ -1002,7 +1003,7 @@ sub _call {
 	my $savedata = thaw(freeze({ data=> $pdata }));
 	_redo_action:
 	if ($v>0 || 1) {
-		printf "v$ver $type query=${query} @ %s\n", strftime( "%Y%m%d %H:%M:%S", localtime());
+		printf "v$ver $type query=%s @ %s\n", $query, strftime( "%Y%m%d %H:%M:%S", localtime());
 		if ($type eq "post" && $v>0) {
 			print "   payload: ".Dumper($pdata);
 		}
@@ -1178,7 +1179,7 @@ sub file_to_mediaid {
 		($data, $c) = $client->{1}->request(post => $query, $payload);
 	};
 	if ($@) {
-		die(sprintf("post1($query):\n%s",$@));
+		die(sprintf("post1(%s):\n%s",$query,$@));
 	}
 	#print "post.media.upload: data ".Dumper($data);
 	#print "post.media.upload: c ".Dumper($data);
@@ -1281,7 +1282,7 @@ sub chunk_init {
 		($data, $c) = $client->{1}->request(post => $query, $payload);
 	};
 	if ($@) {
-		die(sprintf("chunk_init: client->{1}($query, { media_type => $type, total_bytes => $size }: %s",$@));
+		die(sprintf("chunk_init: client->{1}(%s, { media_type => $type, total_bytes => $size }: %s",$query,$@));
 	}
 	return $data;
 }
