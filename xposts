@@ -860,10 +860,10 @@ sub show_mystats {
 	my $followers = $me->{followers_count};
 	my $listed = $me->{listed_count};
 	my $screen_name = $me->{screen_name};
-	my $id = $uinfo->{d};
-	my $verified = uinfo()->{verified};
-	my $verified_type = uinfo()->{verified_type};
-	my $subscription_type = uinfo()->{subscription_type};
+	my $id = $uinfo->{id};
+	my $verified = $uinfo->{verified};
+	my $verified_type = $uinfo->{verified_type};
+	my $subscription_type = $uinfo->{subscription_type};
 	if (!defined($opt_q)) {
 		printf "uinfo: id=%s, verified=%s, verified_type=%s, subscription_type=%s\n",
 			$id, $verified, $verified_type, $subscription_type;
@@ -1553,6 +1553,38 @@ sub xpost {
 	my ($msg) = @_;
 	my $query = "posts";
 	my $name = $query;
+	my $uinfo = uinfo();
+	my $maxsize=240;
+	if ($uinfo->{subscription_type} eq "PremiumPlus") {
+		$maxsize=24959;
+	}
+	if (length($msg) > $maxsize) {
+		my $msgleft = $msg;
+		my $count=1;
+		# XXX break on bytes vs lines
+		while (length($msgleft) > $maxsize) {
+			print "msgleft='%s'\n", $msgleft;
+			my $thismemo = "";
+			if ($count > 1) {
+				$thismemo = sprintf "%d/ ", $count;
+			}
+			my $newmsg = $thismemo.$msgleft;
+			my ($poststr, $msgleft) = xsplitmsg($newmsg, $maxsize);
+			printf "poststr='%s'\n", $poststr;
+			xpost($poststr);
+		}
+		if (length($msgleft) > 0) {
+			printf "msgleft='%s'\n", $msgleft;
+			my $thismemo = "";
+			if ($count > 1) {
+				$thismemo = sprintf "%d/ ", $count;
+			}
+			my $poststr = $thismemo.$msgleft;
+			printf "poststr='%s'\n", $poststr;
+			xpost($poststr);
+		}
+		return;
+	}
 	my $req = {
 			text => $msg,
 	};
@@ -1608,7 +1640,6 @@ sub xpost {
 	# media | poll | quote
 	# $req->{poll} = $poll;
 
-	my $uinfo = uinfo();
 	my $uname = $uinfo->{username};
 	#print "uinfo: ".Dumper($uinfo);
 	# see json/uinfo.json
@@ -1674,4 +1705,19 @@ sub qfollowid {
 	};
 	my ($data, $c) = post2("users/${uid}/following", $req);
 	printf "Follow: %s, Pending: %s\n", $data->{data}->{following}, $data->{data}->{pending_follow};
+}
+sub xsplitmsg {
+	my ($msg, $maxsize) = @_;
+
+	# try by line first
+	my @lines = split(/\n/, $msg);
+	my $line = $lines[0];
+	if (length($line) < $maxsize) {
+		my $poststr = $line;
+		my $msgleft = substr($msg, length($poststr)+1);
+		return ($poststr, $msgleft);
+	}
+	my $poststr = substr($msg, 0, $maxsize);
+	my $msgleft = substr($msg, length($poststr));
+	return ($poststr, $msgleft);
 }
