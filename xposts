@@ -1718,11 +1718,25 @@ sub xsplitmsg {
 	# try by line first
 	my @lines = split(/\n/, $msg);
 	my $line = $lines[0];
+	my $poststr = $line."\n";
 	# attempt to split on lines...
 	if (length($line) < $maxsize) {
 		my $poststr = $line;
 		my $msgleft = substr($msg, length($poststr)+1);
-		return ($poststr, $msgleft);
+		my $i = 1;
+		while (1) {
+			$line = $lines[$i++];
+			if (!defined $line) {
+				return ($poststr, $msgleft);
+			}
+			if ( (length($poststr) + length($line) + 1) >
+				$maxsize) {
+				return ($poststr, $msgleft);
+			}
+			$poststr .= $line . "\n";
+			$msgleft = substr($msgleft, length($line)+1);
+		}
+		die("We have reached the bermuda triangle!");
 	}
 	# XXX insert split on words
 	# ... otherwise, split on chars.
