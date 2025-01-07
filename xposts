@@ -1561,17 +1561,22 @@ sub xpost {
 	if (length($msg) > $maxsize) {
 		my $msgleft = $msg;
 		my $count=1;
-		# XXX break on bytes vs lines
+		# XXX redo loop so while(1) to avoid duplication after the loop
 		while (length($msgleft) > $maxsize) {
-			print "msgleft='%s'\n", $msgleft;
+			printf "msgleft='%s'\n", $msgleft;
 			my $thismemo = "";
 			if ($count > 1) {
 				$thismemo = sprintf "%d/ ", $count;
 			}
 			my $newmsg = $thismemo.$msgleft;
-			my ($poststr, $msgleft) = xsplitmsg($newmsg, $maxsize);
+			my $poststr;
+			($poststr, $msgleft) = xsplitmsg($newmsg, $maxsize);
 			printf "poststr='%s'\n", $poststr;
-			xpost($poststr);
+			printf "msgleft='%s'\n", $msgleft;
+			my $post = xpost($poststr);
+			if (defined $post->{id}) {
+				$opt_W = $post->{id};
+			}
 		}
 		if (length($msgleft) > 0) {
 			printf "msgleft='%s'\n", $msgleft;
@@ -1682,6 +1687,7 @@ sub xpost {
 	print "https://x.com/${uname}/status/${postid} \"${txt}\"\n";
 	#print "post.posts.<msg> c: ".Dumper($c);
 	# see json/post.tweets.msg.json
+	return $data->{data};
 }
 
 sub qfollow {
@@ -1712,11 +1718,14 @@ sub xsplitmsg {
 	# try by line first
 	my @lines = split(/\n/, $msg);
 	my $line = $lines[0];
+	# attempt to split on lines...
 	if (length($line) < $maxsize) {
 		my $poststr = $line;
 		my $msgleft = substr($msg, length($poststr)+1);
 		return ($poststr, $msgleft);
 	}
+	# XXX insert split on words
+	# ... otherwise, split on chars.
 	my $poststr = substr($msg, 0, $maxsize);
 	my $msgleft = substr($msg, length($poststr));
 	return ($poststr, $msgleft);
