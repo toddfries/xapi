@@ -244,6 +244,10 @@ if (defined($opt_a)) {
 		print Dumper($data);
 		exit(0);
 	}
+	if ($opt_a eq "mystats") {
+		show_mystats();
+		exit(0);
+	}
 	if ($opt_a eq "delete") {
 		my ($data, $c) = delete2($ARGV[0]);
 		print Dumper($data);
@@ -1002,8 +1006,10 @@ sub _call {
 
 	my $savedata = thaw(freeze({ data=> $pdata }));
 	_redo_action:
-	if ($v>0 || 1) {
-		printf "v$ver $type query=%s @ %s\n", $query, strftime( "%Y%m%d %H:%M:%S", localtime());
+	if ($v>0 && $opt_q < 1) {
+		printf "v%d %s query=%s @ %s\n",
+			$ver, $type,
+			$query, strftime( "%Y%m%d %H:%M:%S", localtime());
 		if ($type eq "post" && $v>0) {
 			print "   payload: ".Dumper($pdata);
 		}
