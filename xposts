@@ -514,9 +514,9 @@ sub uinfo {
 sub getuser_byname {
 	my (@ppl) = @_;
 
-	my @ppldata;
-	my @pplget;
-	foreach my $who (@ppl) {
+	my @ppldata = ();
+	my @pplget = ();
+	for my $who (@ppl) {
 		my $data = cache_read('u',$who);
 		if (defined($data)) {
 			#print "ucache hit  ".$data->{id}."\n";
@@ -529,13 +529,17 @@ sub getuser_byname {
 		return @ppldata;
 	}
 
-	foreach my $who (@pplget) {
+	for my $who (@pplget) {
 		my ($res,$c) = get2("users/by/username/$who?user.fields=".$fields->{u});
 		if (!defined($res)) {
 			die("empty result querying $who");
 		}
 		$data = $res->{data};
 		if (!defined($data)) {
+			if (defined $res->{errors}) {
+				fmt_errors($res->{errors});
+				next;
+			}
 			die("empty data ".Dumper($res));
 		}
 		if (!defined($data->{id})) {
@@ -802,6 +806,10 @@ sub show_ustats {
 	}
 	$data = $res->{data};
 	if (!defined($data)) {
+		if (defined $res->{errors}) {
+			fmt_errors($res->{errors});
+			return;
+		}
 		die("empty data ".Dumper($res));
 	}
 	my $verify;
@@ -1052,8 +1060,8 @@ sub _call {
 			$err .= ": ".$data->{detail};
 		}
 		if (defined $data->{errors}) {
-			foreach my $iter (sort @{ $data->{errors} }) {
-				foreach my $ename (sort keys %{ $iter }) {
+			for my $iter (sort @{ $data->{errors} }) {
+				for my $ename (sort keys %{ $iter }) {
 					$err .= ": error.$ename = ".$iter->{$ename};
 				}
 			}
@@ -1064,7 +1072,7 @@ sub _call {
 		$err .= "\n";
 		my $estat = "";
 		if ($v>0) {
-			foreach my $s (sort keys %{$hdrs->{stats}}) {
+			for my $s (sort keys %{$hdrs->{stats}}) {
 				$estat .= sprintf "\t%s = %s\n", $s, $hdrs->{stats}->{$s};
 			}
 			$estat .= "\n";
@@ -1748,4 +1756,17 @@ sub xsplitmsg {
 	$poststr = substr($msg, 0, $maxsize);
 	my $msgleft = substr($msg, length($poststr));
 	return ($poststr, $msgleft);
+}
+sub fmt_errors {
+	my (@elist) = @_;
+
+	my $ecount = 0;
+	for my $el (@elist) {
+		printf "%3d error list\n", $ecount++;
+		for my $error (@{ $el }) {
+			for my $var (sort keys %{$error}) {
+				printf "   %s = %s\n", $var, $error->{$var};
+			}
+		}
+	}
 }
