@@ -110,3 +110,7 @@ xposts -a get2 "tweets/search/recent?sort_order=recency&user.fields=verified_fol
 # usage tweets
 # !free
 xposts -a get2 "usage/tweets"
+
+# liked_tweets
+# free, 1/15m
+perl ./xposts -a get2 users/218538224/liked_tweets
