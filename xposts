@@ -1083,6 +1083,8 @@ sub _call {
 		}
 		if ($data->{detail} eq "Too Many Requests") {
 			print STDERR $err.$estat;
+			# sometimes X return a time in the past, so ensure rapid retry doesn't occur
+			sleep(600);
 			if (check_limits($name, $hdrs->{lims})) {
 				goto _redo_action;
 			}
