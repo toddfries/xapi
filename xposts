@@ -143,12 +143,7 @@ if (!defined($c->{cache_prefix})) {
 }
 
 my $cache_prefix = $c->{cache_prefix};
-$cachedir .= "/".sha1_hex($api_url);
-if (! -d $cachedir) {
-	mkdir($cachedir);
-}
-$cachedir .= "/${cache_prefix}";
-
+$cachedir .= "/".sha1_hex($api_url . $cache_prefix);
 if (! -d $cachedir) {
 	mkdir($cachedir);
 }
