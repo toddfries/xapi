@@ -106,7 +106,7 @@ getopts('a:bc:d:j:lp:qr:su:vw:B:I:J:Q:ST:LNO:W:');
 
 $opt_I //= $opt_i;
 
-if (!defined($opt_c)) {
+if (! -f $opt_c) {
 	die "Config file '${opt_c}' EEXIST";
 }
 
@@ -153,7 +153,7 @@ $client->{1} = X::API->new_with_traits(
 	#api_ext	=> '',
 	traits => [ qw/ApiMethods/ ],
 	#traits => [ qw/Enchilada/ ],
-	agent => "v2UserLookupJS",
+	agent => "v1UserLookupJS",
 	consumer_key	=> $c->{consumer_key},
 	consumer_secret => $c->{consumer_secret},
 	access_token	=> $c->{access_token},
@@ -181,7 +181,9 @@ our $smemcache = { }; # stats
 
 our $v = $opt_v;
 
-openlog($ident, $logopt, $facility);
+if (!defined $opt_N) {
+	openlog($ident, $logopt, $facility);
+}
 
 if ($opt_s>0) {
 	show_mystats();
