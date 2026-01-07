@@ -158,7 +158,7 @@ $client->{1} = X::API->new_with_traits(
 	consumer_secret => $c->{consumer_secret},
 	access_token	=> $c->{access_token},
 	access_token_secret => $c->{access_token_secret},
-	api_url => 'http://localhost:8080/',
+	api_url => $api_url,
 );
 #print Dumper($client->{1});
 $client->{2} = X::API->new_with_traits(
@@ -170,7 +170,7 @@ $client->{2} = X::API->new_with_traits(
 	consumer_secret => $c->{consumer_secret},
 	access_token	=> $c->{access_token},
 	access_token_secret => $c->{access_token_secret},
-	api_url => 'http://localhost:8080/',
+	api_url => $api_url,
 );
 #print Dumper($client->{2});
 
