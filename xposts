@@ -142,7 +142,7 @@ if (! -d $cachedir) {
 }
 
 our $me_glob;
-my $api_url = 'https://api.x.com';
+our $api_url = 'https://api.x.com';
 if (defined $opts->{api_url}) {
 	$api_url = $opts->{api_url};
 }
@@ -502,10 +502,14 @@ sub init_fields {
 }
 
 sub uinfo {
-	my $me = get_creds();
-	my $uc = cache_read('u',$me->{screen_name});
-	if (defined($uc)) {
-		return $uc;
+	if (defined $me_glob) {
+		return $me_glob;
+	}
+	my $ck = "get2.users.me";
+	$c = read_from_cache($ck);
+	if (defined $c) {
+		$me_glob = $c;
+		return $me_glob;
 	}
 
 	my $ufields = $fields->{u};
@@ -515,8 +519,11 @@ sub uinfo {
 	my ($data, $c) = get2("users/me?".
 		"user.fields=$ufields&".
 		"tweet.fields=$tfields");
-	umcache_write($data->{data});
-	return $data->{data};
+	$me_glob = $data->{data};
+	if (defined $c) {
+		write_to_cache($ck, $me_glob);
+	}
+	return $me_glob;
 }
 
 sub getuser_byname {
@@ -525,7 +532,7 @@ sub getuser_byname {
 	my @ppldata = ();
 	my @pplget = ();
 	for my $who (@ppl) {
-		my $data = cache_read('u',$who);
+		my $data = umcache_read($who);
 		if (defined($data)) {
 			#print "ucache hit  ".$data->{id}."\n";
 			push @ppldata, $data;
@@ -566,7 +573,7 @@ sub getuser_byname {
 sub getuser_byid {
 	my ($id) = @_;
 
-	my $data = cache_read('u',$id);
+	my $data = umcache_read($id);
 	if (defined($data)) {
 		#print "ucache hit  ".$data->{id}."\n";
 		return $data;
@@ -604,7 +611,7 @@ sub expand_tweet {
 	}
 
 	for my $user ( @{ $posts->{includes}->{users} } ) {
-		if (defined(cache_read('u',$user->{id}))) {
+		if (defined(umcache_read($user->{id}))) {
 			next;
 		}
 		umcache_write($user);
@@ -849,49 +856,37 @@ sub show_ustats {
 	
 }
 
-sub get_creds {
-	if (defined($me_glob)) {
-		return $me_glob;
-	}
-	my $ck = "get.account.verifiy_credentials";
-	my $data = read_from_cache($ck);
-	if (defined($data)) {
-		$me_glob = $data;
-		return $me_glob;
-	}
-	my ($me_glob, $c) = get1("account/verify_credentials");
-	if ($v>0) {
-		print "v1 get query=account/verify_credentials\n";
-	}
-	write_to_cache($ck, $me_glob);
-	return $me_glob;
-}
-
 
 sub show_mystats {
-	my $me = get_creds();
+	my $me = uinfo();
 	if (defined($me) && $v > 0) {
 		print Dumper($me);
 	}
-	my $uinfo = uinfo();
-	my $favs = $me->{favourites_count};
-	my $friends = $me->{friends_count};
-	my $statuses = $me->{statuses_count};
-	my $followers = $me->{followers_count};
-	my $listed = $me->{listed_count};
-	my $screen_name = $me->{screen_name};
-	my $id = $uinfo->{id};
-	my $verified = $uinfo->{verified};
-	my $verified_type = $uinfo->{verified_type};
-	my $subscription_type = $uinfo->{subscription_type};
+	my $favs = $me->{public_metrics}->{like_count};
+	my $friends = $me->{public_metrics}->{following_count};
+	my $statuses = $me->{public_metrics}->{tweet_count};
+	my $followers = $me->{public_metrics}->{followers_count};
+	my $vfollowers = $me->{verified_followers_count};
+	if (!defined $vfollowers) {
+		$vfollowers = 0;
+	}
+	my $listed = $me->{public_metrics}->{listed_count};
+	my $screen_name = $me->{username};
+	my $id = $me->{id};
+	my $verified = $me->{verified};
+	my $verified_type = $me->{verified_type};
+	my $subscription_type = $me->{subscription_type};
+	if (! defined $subscription_type) {
+		$subscription_type = $verified_type;
+	}
 	if (!defined($opt_q)) {
 		printf "uinfo: id=%s, verified=%s, verified_type=%s, subscription_type=%s\n",
 			$id, $verified, $verified_type, $subscription_type;
 	}
 	my $output = "";
 	$output .= sprintf "%s: ", $screen_name;
-	$output .= sprintf " %d favs, %d friends, %d statuses, %d followers, %d listed\n",
-		$favs, $friends, $statuses, $followers, $listed;
+	$output .= sprintf " %d favs, %d friends, %d statuses, %d followers, %d vfollowers, %d listed\n",
+		$favs, $friends, $statuses, $followers, $vfollowers, $listed;
 	if (!defined($opt_q)) {
 		print $output;
 	}
@@ -902,7 +897,13 @@ sub show_mystats {
 	if ($v<1) {
 		return;
 	}
+	#my $data = { };
+	#$data->{language} = $me->{language};
+	#$data->{always_allow_dms_from_subscribers} = $me->{always_allow_dms_from_subscribers};
+	#$data->{tz} = $me->{
 
+	# XXX what below this is needed?
+	return;
 	# seems this is unlimited calls?
 	($data, $c) = get1("account/settings");
 	my $seen = { };
