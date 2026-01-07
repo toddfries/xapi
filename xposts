@@ -131,20 +131,29 @@ if (!defined($c)) {
 	die "[creds] not found in xapi.conf";
 }
 
-if (!defined($c->{cache_prefix})) {
-	die "[creds]cache_prefix not found";
-}
-my $cache_prefix = $c->{cache_prefix};
-$cachedir .= "/${cache_prefix}";
-mkdir($cachedir);
-if (! -d $cachedir) {
-	die "Could not mkdir($cachedir)";
-}
 
 our $me_glob;
 our $api_url = 'https://api.x.com';
 if (defined $opts->{api_url}) {
 	$api_url = $opts->{api_url};
+}
+
+if (!defined($c->{cache_prefix})) {
+	die "[creds]cache_prefix not found";
+}
+
+my $cache_prefix = $c->{cache_prefix};
+$cachedir .= "/".sha1_hex($api_url);
+if (! -d $cachedir) {
+	mkdir($cachedir);
+}
+$cachedir .= "/${cache_prefix}";
+
+if (! -d $cachedir) {
+	mkdir($cachedir);
+}
+if (! -d $cachedir) {
+	die "Could not mkdir($cachedir)";
 }
 
 our $client = { };
