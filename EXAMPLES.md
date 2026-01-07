@@ -59,6 +59,7 @@ xposts -B :postid
 # free, 1/15m
 xposts -T :postid
 xposts -a get2 "posts/1732923352?tweet.fields=community_id"
+xposts -a get2 "posts/1732923352&tweet.fields=id,media_metadata,organic_metrics,public_metrics,scopes,source"
 
 # show followers
 # !free
